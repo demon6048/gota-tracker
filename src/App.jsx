@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Home, PlusCircle, PieChart, Wallet, Calendar, 
-  CheckCircle, PiggyBank, TrendingUp, Edit2, 
-  Save, X, Loader2, Lock, AlertTriangle, AlertCircle, Trash2,
-  Zap, ShieldAlert
+  CheckCircle, TrendingUp, Edit2, 
+  Save, X, Loader2, Lock, AlertCircle, Trash2,
+  Zap, ShieldAlert, Wifi, WifiOff, Loader
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -11,24 +11,26 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
-// --- Inicialización de Firebase con tus llaves directas ---
+// ==========================================
+// LLAVES DE GOTATRACKER2026 (NUEVA BASE DE DATOS)
+// ==========================================
 const firebaseConfig = {
-  apiKey: "AIzaSyD3InxOi9-GczeHB7KuPGkJxIiHKwp7wAI",
-  authDomain: "mis-deudas-al-dia-a0754.firebaseapp.com",
-  projectId: "mis-deudas-al-dia-a0754",
-  storageBucket: "mis-deudas-al-dia-a0754.firebasestorage.app",
-  messagingSenderId: "612767332474",
-  appId: "1:612767332474:web:764c1552f668ba7b9ca3c3"
+  apiKey: "AIzaSyDlSt8D3T4taHJKZ1waAgVE14lS_j2lgms",
+  authDomain: "gotatracker2026.firebaseapp.com",
+  projectId: "gotatracker2026",
+  storageBucket: "gotatracker2026.firebasestorage.app",
+  messagingSenderId: "982001513919",
+  appId: "1:982001513919:web:2aab1cd60a0ef13613dd0a"
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Colección Global Compartida: Para que la PC y el Celular vean la misma información
-const GLOBAL_COLLECTION = 'mis_prestamos';
+// ESTA ES LA CLAVE PARA QUE CELULAR Y PC VEAN LO MISMO:
+const coleccionGlobal = 'boveda_global'; 
 
-// --- Utilidades de Fecha ---
+// --- Utilidades de Fecha Seguras ---
 const getLocalTodayString = () => {
   const d = new Date();
   const year = d.getFullYear();
@@ -38,6 +40,7 @@ const getLocalTodayString = () => {
 };
 
 const addDaysToDateStr = (dateStr, days) => {
+  if (!dateStr) return getLocalTodayString();
   const d = new Date(dateStr + 'T12:00:00');
   d.setDate(d.getDate() + days);
   const year = d.getFullYear();
@@ -47,14 +50,15 @@ const addDaysToDateStr = (dateStr, days) => {
 };
 
 const getDayOfWeek = (dateStr) => {
+  if (!dateStr) return 0;
   const d = new Date(dateStr + 'T12:00:00');
   return d.getDay(); // 0 = Domingo
 };
 
 const getEndDate = (startDate, daysToAdd) => {
+  if (!startDate || isNaN(daysToAdd) || daysToAdd <= 0) return new Date();
   let date = new Date(startDate);
   let added = 0;
-  if (daysToAdd <= 0) return date;
   while (added < daysToAdd) {
     date.setDate(date.getDate() + 1);
     if (date.getDay() !== 0) added++; // Saltar domingos
@@ -63,8 +67,9 @@ const getEndDate = (startDate, daysToAdd) => {
 };
 
 const formatDate = (dateString) => {
-  if (!dateString) return '';
+  if (!dateString) return 'Fecha inválida';
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'Fecha inválida';
   return date.toLocaleDateString('es-PE', { weekday: 'short', day: '2-digit', month: 'short' });
 };
 
@@ -72,18 +77,21 @@ const formatDate = (dateString) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  const [firebaseStatus, setFirebaseStatus] = useState('connecting'); 
+  
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loans, setLoans] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   const [paymentModalData, setPaymentModalData] = useState(null);
 
-  // 1. Autenticación Anónima
+  // 1. Autenticación Anónima (Para poder escribir en Firebase)
   useEffect(() => {
     const initAuth = async () => {
       try {
         await signInAnonymously(auth);
       } catch (error) {
         console.error("Error en autenticación:", error);
+        setFirebaseStatus('error');
       }
     };
     initAuth();
@@ -96,35 +104,28 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Fetch y Lógica "Catch-up" (Auto-Mora) Sincronizada
+  // 2. Fetch de datos globales (Igual para PC y Celular)
   useEffect(() => {
     if (!user) return;
 
-    // Conectamos a la colección global para que todos los dispositivos vean lo mismo
-    const loansRef = collection(db, GLOBAL_COLLECTION);
+    const loansRef = collection(db, coleccionGlobal);
     
     const unsubscribe = onSnapshot(loansRef, async (snapshot) => {
+      setFirebaseStatus('connected'); 
+      
       const todayStr = getLocalTodayString();
       const yesterdayStr = addDaysToDateStr(todayStr, -1);
 
-      // --- Seeder: Cargar datos iniciales si está vacío ---
+      // Si la base de datos está vacía, no hay datos demo, solo se limpia el estado.
       if (snapshot.empty) {
-        const initialLoans = [
-          { prestamista: 'José', capital: 208, interes: 42, deudaTotal: 250, saldoPendiente: 250, cuotaDiaria: 50, montoExigible: 50, fechaInicio: new Date().toISOString(), lastProcessedDate: todayStr, lastManualPaymentDate: null, manualPaymentsCount: 0, pagadoAcumulado: 0 },
-          { prestamista: 'Dylan', capital: 216, interes: 44, deudaTotal: 260, saldoPendiente: 260, cuotaDiaria: 20, montoExigible: 20, fechaInicio: new Date().toISOString(), lastProcessedDate: todayStr, lastManualPaymentDate: null, manualPaymentsCount: 0, pagadoAcumulado: 0 },
-          { prestamista: 'Joel', capital: 395, interes: 80, deudaTotal: 475, saldoPendiente: 475, cuotaDiaria: 25, montoExigible: 25, fechaInicio: new Date().toISOString(), lastProcessedDate: todayStr, lastManualPaymentDate: null, manualPaymentsCount: 0, pagadoAcumulado: 0 },
-          { prestamista: 'Steven', capital: 500, interes: 100, deudaTotal: 600, saldoPendiente: 600, cuotaDiaria: 25, montoExigible: 25, fechaInicio: new Date().toISOString(), lastProcessedDate: todayStr, lastManualPaymentDate: null, manualPaymentsCount: 0, pagadoAcumulado: 0 },
-        ];
-        
-        for (const loan of initialLoans) {
-          await addDoc(loansRef, loan);
-        }
+        setLoans([]);
+        setLoadingData(false);
         return; 
       }
 
       const fetchedLoans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // --- Catch-up Lógica: Actualizar Mora ---
+      // --- Lógica: Actualizar Mora automáticamente ---
       for (let loan of fetchedLoans) {
         if (loan.saldoPendiente <= 0) continue;
 
@@ -141,11 +142,11 @@ export default function App() {
         }
 
         if (daysToAdd > 0) {
-          let addExigible = daysToAdd * loan.cuotaDiaria;
+          let addExigible = daysToAdd * (loan.cuotaDiaria || 0);
           let currentExigible = loan.montoExigible || 0;
           
           try {
-            const loanDoc = doc(db, GLOBAL_COLLECTION, loan.id);
+            const loanDoc = doc(db, coleccionGlobal, loan.id);
             await updateDoc(loanDoc, {
               montoExigible: currentExigible + addExigible,
               lastProcessedDate: todayStr
@@ -160,6 +161,7 @@ export default function App() {
       setLoadingData(false);
     }, (error) => {
       console.error("Error fetching loans:", error);
+      setFirebaseStatus('error');
       setLoadingData(false);
     });
 
@@ -172,13 +174,13 @@ export default function App() {
     let saldoTotal = 0, exigibleTotal = 0;
 
     loans.forEach(loan => {
-      totalDeuda += loan.deudaTotal;
-      saldoTotal += loan.saldoPendiente;
-      totalCapital += loan.capital;
-      totalIntereses += loan.interes;
+      totalDeuda += (loan.deudaTotal || 0);
+      saldoTotal += (loan.saldoPendiente || 0);
+      totalCapital += (loan.capital || 0);
+      totalIntereses += (loan.interes || 0);
       
       if (loan.saldoPendiente > 0) {
-        cuotaHoy += Math.min(loan.cuotaDiaria, loan.saldoPendiente);
+        cuotaHoy += Math.min((loan.cuotaDiaria || 0), (loan.saldoPendiente || 0));
         exigibleTotal += (loan.montoExigible || 0);
       }
     });
@@ -200,7 +202,7 @@ export default function App() {
     const nuevoPagado = (loan.pagadoAcumulado || 0) + amountPaid;
 
     try {
-      const loanDoc = doc(db, GLOBAL_COLLECTION, loan.id);
+      const loanDoc = doc(db, coleccionGlobal, loan.id);
       await updateDoc(loanDoc, {
         saldoPendiente: nuevoSaldo,
         montoExigible: nuevoExigible,
@@ -211,13 +213,14 @@ export default function App() {
       setPaymentModalData(null);
     } catch (error) {
       console.error("Error al registrar pago:", error);
+      setFirebaseStatus('error');
     }
   };
 
   const handleEdit = async (id, nuevoSaldo, nuevaCuota, nuevoExigible) => {
     if (!user) return;
     try {
-      const loanDoc = doc(db, GLOBAL_COLLECTION, id);
+      const loanDoc = doc(db, coleccionGlobal, id);
       await updateDoc(loanDoc, {
         saldoPendiente: parseFloat(nuevoSaldo) || 0,
         cuotaDiaria: parseFloat(nuevaCuota) || 0,
@@ -225,27 +228,30 @@ export default function App() {
       });
     } catch (error) {
       console.error("Error al editar:", error);
+      setFirebaseStatus('error');
     }
   };
 
   const handleAddLoan = async (newLoan) => {
     if (!user) return;
     try {
-      const loansRef = collection(db, GLOBAL_COLLECTION);
+      const loansRef = collection(db, coleccionGlobal);
       await addDoc(loansRef, newLoan);
       setActiveTab('dashboard');
     } catch (error) {
       console.error("Error al agregar:", error);
+      setFirebaseStatus('error');
     }
   };
 
   const handleDelete = async (id) => {
     if (!user) return;
     try {
-      const loanDoc = doc(db, GLOBAL_COLLECTION, id);
+      const loanDoc = doc(db, coleccionGlobal, id);
       await deleteDoc(loanDoc);
     } catch (error) {
       console.error("Error al eliminar:", error);
+      setFirebaseStatus('error');
     }
   };
 
@@ -265,21 +271,28 @@ export default function App() {
     <div className="flex justify-center bg-[#030712] min-h-screen font-sans text-slate-200">
       <div className="w-full max-w-md bg-[#050505] min-h-screen shadow-2xl flex flex-col relative overflow-hidden ring-1 ring-white/5">
         
-        {/* Fondo Futurista Alucinante */}
+        {/* Fondo Futurista */}
         <div className="absolute top-[-10%] left-[-10%] w-[120%] h-[40%] bg-gradient-to-b from-emerald-900/30 to-transparent blur-3xl pointer-events-none"></div>
         <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-900/10 blur-[80px] pointer-events-none"></div>
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[80%] h-64 bg-emerald-500/5 blur-[100px] pointer-events-none"></div>
 
-        {/* Header - Neon Style */}
+        {/* Header */}
         <header className="p-6 pb-8 z-10 relative shrink-0 border-b border-white/10 bg-black/40 backdrop-blur-xl">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-300 flex items-center gap-2 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
               <Zap className="text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,1)]" size={28} /> 
-              GOTA<span className="font-light text-slate-300">TRACKER</span>
+              <span>GOTA<span className="font-light text-slate-300">TRACKER</span></span>
             </h1>
-            <div className="bg-emerald-950/50 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-emerald-500/30 flex items-center gap-2 text-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.15)] uppercase">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_5px_#34d399]"></span>
-              En Línea
+            
+            {/* INDICADOR DE CONEXIÓN FIREBASE */}
+            <div className={`px-3 py-1.5 rounded-full text-[9px] font-bold tracking-widest border flex items-center gap-1.5 shadow-lg uppercase transition-all duration-300 ${
+              firebaseStatus === 'connected' ? 'bg-emerald-950/50 text-emerald-400 border-emerald-500/30 shadow-[0_0_15px_rgba(52,211,153,0.15)]' : 
+              firebaseStatus === 'connecting' ? 'bg-amber-950/50 text-amber-400 border-amber-500/30 shadow-[0_0_15px_rgba(251,191,36,0.15)]' : 
+              'bg-rose-950/50 text-rose-400 border-rose-500/30 shadow-[0_0_15px_rgba(244,63,94,0.15)]'
+            }`}>
+              {firebaseStatus === 'connected' && <span className="flex items-center gap-1.5"><Wifi size={12} /> FIREBASE ACTIVO</span>}
+              {firebaseStatus === 'connecting' && <span className="flex items-center gap-1.5"><Loader size={12} className="animate-spin" /> CONECTANDO...</span>}
+              {firebaseStatus === 'error' && <span className="flex items-center gap-1.5"><WifiOff size={12} /> ERROR RED</span>}
             </div>
           </div>
           
@@ -288,14 +301,14 @@ export default function App() {
               <p className="text-slate-500 text-xs mb-1 font-bold uppercase tracking-wider">Deuda Global</p>
               <h2 className="text-4xl font-black text-white tracking-tighter drop-shadow-[0_2px_10px_rgba(255,255,255,0.1)]">
                 <span className="text-emerald-500/50 text-2xl mr-1">S/</span>
-                {stats.saldoTotal.toFixed(2)}
+                <span>{stats.saldoTotal.toFixed(2)}</span>
               </h2>
             </div>
             <div className="text-right">
                <p className="text-slate-500 text-[10px] mb-1 font-bold uppercase tracking-wider">Exigible Hoy</p>
                <h3 className={`text-2xl font-black ${stats.exigibleTotal > stats.cuotaHoy ? 'text-rose-400 drop-shadow-[0_0_15px_rgba(244,63,94,0.6)] animate-pulse' : 'text-amber-400 drop-shadow-[0_0_15px_rgba(251,191,36,0.4)]'}`}>
                  <span className="text-sm mr-1 opacity-50">S/</span>
-                 {stats.exigibleTotal.toFixed(2)}
+                 <span>{stats.exigibleTotal.toFixed(2)}</span>
                </h3>
             </div>
           </div>
@@ -308,7 +321,7 @@ export default function App() {
           {activeTab === 'insights' && <InsightsTab stats={stats} loans={loans} />}
         </main>
 
-        {/* Bottom Nav - Glassmorphism */}
+        {/* Bottom Nav */}
         <nav className="absolute bottom-6 left-4 right-4 bg-slate-900/80 backdrop-blur-2xl border border-white/10 flex justify-around p-2 rounded-3xl z-20 shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
           <NavItem icon={<Home size={20} />} label="Panel" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
           <NavItem icon={<PlusCircle size={20} />} label="Nuevo" isActive={activeTab === 'add'} onClick={() => setActiveTab('add')} />
@@ -326,7 +339,7 @@ export default function App() {
 // --- Componentes Secundarios ---
 
 function DashboardTab({ loans, onPayRequest, onEdit, onDelete }) {
-  const activeLoans = loans.filter(l => l.saldoPendiente > 0);
+  const activeLoans = loans.filter(l => (l.saldoPendiente || 0) > 0);
   
   return (
     <div className="space-y-5 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -340,8 +353,8 @@ function DashboardTab({ loans, onPayRequest, onEdit, onDelete }) {
         {activeLoans.length === 0 && (
           <div className="text-center p-10 bg-white/5 backdrop-blur-md rounded-3xl border border-white/10 shadow-[0_0_30px_rgba(52,211,153,0.1)]">
             <CheckCircle className="mx-auto text-emerald-400 mb-4 drop-shadow-[0_0_15px_rgba(52,211,153,0.8)]" size={48} />
-            <p className="text-white font-bold text-lg mb-1 tracking-wide">¡Sistema Limpio!</p>
-            <p className="text-slate-500 text-sm">No se detectan deudas activas.</p>
+            <p className="text-white font-bold text-lg mb-1 tracking-wide">¡Base de Datos Limpia!</p>
+            <p className="text-slate-500 text-sm">Registra tu primer préstamo en la pestaña NUEVO.</p>
           </div>
         )}
       </div>
@@ -351,33 +364,31 @@ function DashboardTab({ loans, onPayRequest, onEdit, onDelete }) {
 
 function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [editSaldo, setEditSaldo] = useState(loan.saldoPendiente);
-  const [editCuota, setEditCuota] = useState(loan.cuotaDiaria);
-  const [editExigible, setEditExigible] = useState(loan.montoExigible || 0);
+  const [editSaldo, setEditSaldo] = useState((loan.saldoPendiente || 0).toString());
+  const [editCuota, setEditCuota] = useState((loan.cuotaDiaria || 0).toString());
+  const [editExigible, setEditExigible] = useState((loan.montoExigible || 0).toString());
 
-  const cuotasRestantes = Math.ceil(loan.saldoPendiente / loan.cuotaDiaria);
-  const fechaFin = getEndDate(new Date(), cuotasRestantes);
+  // Blindaje matemático
+  const cuotaSegura = loan.cuotaDiaria > 0 ? loan.cuotaDiaria : 1;
+  const cuotasRestantes = Math.ceil((loan.saldoPendiente || 0) / cuotaSegura);
+  const fechaFin = getEndDate(loan.fechaInicio, cuotasRestantes);
   
   const todayStr = getLocalTodayString();
   const yaPagadoHoy = loan.lastManualPaymentDate === todayStr && (loan.manualPaymentsCount || 0) >= 1;
   const exigible = loan.montoExigible || 0;
 
-  // Lógica de Neón y Estados
-  let glowColor = "rgba(52,211,153,"; // Emerald base
-  let borderColor = "border-emerald-500/30";
+  let glowColor = "rgba(52,211,153,"; 
   let statusBadge = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
   let statusText = "EN LÍNEA";
   let isDanger = false;
 
   if (exigible > loan.cuotaDiaria) {
-    glowColor = "rgba(244,63,94,"; // Rose base
-    borderColor = "border-rose-500/50";
+    glowColor = "rgba(244,63,94,"; 
     statusBadge = "bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse";
     statusText = "MORA CRÍTICA";
     isDanger = true;
   } else if (exigible > 0) {
-    glowColor = "rgba(251,191,36,"; // Amber base
-    borderColor = "border-amber-400/30";
+    glowColor = "rgba(251,191,36,"; 
     statusBadge = "bg-amber-400/10 text-amber-400 border-amber-400/20";
     statusText = "PENDIENTE";
   }
@@ -413,13 +424,9 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
 
   return (
     <div className={`relative group p-[1px] rounded-[32px] overflow-hidden transition-all duration-500 shadow-[0_10px_30px_-15px_${glowColor}0.3)] hover:shadow-[0_15px_40px_-10px_${glowColor}0.5)]`}>
-      {/* Animated Border Gradient Wrapper */}
       <div className={`absolute inset-0 bg-gradient-to-br ${isDanger ? 'from-rose-500 via-rose-900 to-black' : 'from-slate-700 via-slate-800 to-black'} group-hover:opacity-100 transition-opacity duration-500`}></div>
       
-      {/* Inner Card (Glassmorphism) */}
       <div className="relative bg-[#0a0a0a]/90 backdrop-blur-2xl p-5 sm:p-6 rounded-[31px] h-full border border-white/5 flex flex-col justify-between">
-        
-        {/* Top Row: Title & Badge */}
         <div className="flex justify-between items-start mb-6">
           <div>
             <div className="flex items-center gap-3">
@@ -427,17 +434,16 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
               <button onClick={() => setIsEditing(true)} className="text-slate-600 hover:text-cyan-400 transition-colors bg-white/5 p-1.5 rounded-full"><Edit2 size={12} /></button>
             </div>
             <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1.5 font-bold tracking-widest uppercase">
-              <Calendar size={12} className="text-slate-400" /> Fin: {formatDate(fechaFin.toISOString())}
+              <Calendar size={12} className="text-slate-400" /> 
+              <span>Fin: {formatDate(fechaFin.toISOString())}</span>
             </p>
           </div>
-          
           <div className={`px-3 py-1 rounded-full text-[9px] font-black tracking-widest border flex items-center gap-1.5 shadow-lg ${statusBadge}`}>
             {isDanger && <ShieldAlert size={10} />}
-            {statusText}
+            <span>{statusText}</span>
           </div>
         </div>
 
-        {/* Middle Row: Metrics Display */}
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="bg-black/50 p-4 rounded-2xl border border-white/5 shadow-inner">
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Deuda Restante</p>
@@ -447,12 +453,11 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
             {isDanger && <div className="absolute top-0 right-0 w-12 h-12 bg-rose-500/20 blur-xl rounded-full"></div>}
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1 relative z-10">Exigible</p>
             <p className={`text-xl font-black tracking-tight relative z-10 ${isDanger ? 'text-rose-400 drop-shadow-[0_0_10px_rgba(244,63,94,0.5)]' : (exigible > 0 ? 'text-amber-400' : 'text-slate-300')}`}>
-              S/ {exigible.toFixed(2)}
+              <span>S/ {exigible.toFixed(2)}</span>
             </p>
           </div>
         </div>
 
-        {/* Bottom Row: Action */}
         <div className="flex items-center justify-between mt-auto">
           <div className="flex flex-col">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Cuota Diaria</span>
@@ -464,12 +469,10 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
               ${yaPagadoHoy 
                 ? 'bg-slate-900 text-amber-500 border border-amber-500/30 shadow-[0_0_15px_rgba(251,191,36,0.15)] hover:shadow-[0_0_25px_rgba(251,191,36,0.3)]' 
                 : 'bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_35px_rgba(16,185,129,0.7)]'}`}>
-            
-            {/* Glossy overlay */}
             <span className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent rounded-t-2xl pointer-events-none"></span>
-            
             <span className="relative z-10 flex items-center gap-2 tracking-wide">
-              {yaPagadoHoy ? <><Lock size={16} /> LOCK</> : <><Wallet size={16} /> EJECUTAR</>}
+              {yaPagadoHoy ? <Lock size={16} /> : <Wallet size={16} />}
+              <span>{yaPagadoHoy ? 'LOCK' : 'EJECUTAR'}</span>
             </span>
           </button>
         </div>
@@ -479,7 +482,7 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
 }
 
 function PaymentModal({ loan, onClose, onSubmit }) {
-  const [amount, setAmount] = useState(loan.montoExigible > 0 ? loan.montoExigible : loan.cuotaDiaria);
+  const [amount, setAmount] = useState((loan.montoExigible > 0 ? loan.montoExigible : loan.cuotaDiaria).toString());
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   
@@ -498,10 +501,7 @@ function PaymentModal({ loan, onClose, onSubmit }) {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center z-50 p-4 pb-0 sm:pb-4 animate-in fade-in duration-300">
       <div className="bg-[#0a0a0a] w-full max-w-sm rounded-t-[40px] sm:rounded-[40px] border border-white/10 shadow-[0_-20px_60px_rgba(0,0,0,0.8)] p-8 pb-12 sm:pb-8 relative overflow-hidden animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-400">
-        
-        {/* Glowing orb background inside modal */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-[50px]"></div>
-
         <div className="flex justify-between items-center mb-8 relative z-10">
           <h3 className="text-xl font-black text-white tracking-tighter uppercase">
             Transacción: <span className="text-emerald-400">{loan.prestamista}</span>
@@ -518,7 +518,9 @@ function PaymentModal({ loan, onClose, onSubmit }) {
 
           {requiresPassword && (
             <div className="animate-in slide-in-from-top-4">
-              <label className="block text-[10px] font-bold text-rose-400 mb-2 flex items-center gap-2 uppercase tracking-widest drop-shadow-[0_0_5px_rgba(244,63,94,0.5)]"><Lock size={12} /> Protocolo de Seguridad Requerido (KGB2026):</label>
+              <label className="block text-[10px] font-bold text-rose-400 mb-2 flex items-center gap-2 uppercase tracking-widest drop-shadow-[0_0_5px_rgba(244,63,94,0.5)]">
+                <Lock size={12} /> <span>Protocolo (KGB2026):</span>
+              </label>
               <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }}
                 className="w-full bg-black border-2 border-rose-500/40 text-white rounded-3xl px-6 py-5 text-xl text-center tracking-[0.5em] outline-none focus:border-rose-400 focus:shadow-[0_0_20px_rgba(244,63,94,0.3)] shadow-inner transition-all" />
             </div>
@@ -528,7 +530,10 @@ function PaymentModal({ loan, onClose, onSubmit }) {
 
         <button onClick={handleSubmit} className="relative w-full overflow-hidden bg-emerald-500 text-black font-black py-5 rounded-3xl shadow-[0_0_30px_rgba(16,185,129,0.3)] hover:shadow-[0_0_40px_rgba(16,185,129,0.6)] text-lg tracking-widest uppercase transition-all transform hover:scale-[1.02] active:scale-[0.98]">
            <span className="absolute inset-0 bg-white/20 animate-pulse"></span>
-           <span className="relative z-10 flex justify-center items-center gap-2">Autorizar Pago <CheckCircle size={20}/></span>
+           <span className="relative z-10 flex justify-center items-center gap-2">
+             <span>Autorizar Pago</span>
+             <CheckCircle size={20}/>
+           </span>
         </button>
       </div>
     </div>
@@ -551,16 +556,23 @@ function AddLoanTab({ onAdd }) {
     if (!prestamista || capital <= 0 || cuota <= 0) return;
     setLoading(true);
     
+    // Al ser un préstamo nuevo creado hoy, simulamos que su última fecha de proceso fue ayer
+    // Esto asegura que al volver a cargar, la lógica de Catch-up sume correctamente su primera cuota hoy
+    const yesterdayStr = addDaysToDateStr(getLocalTodayString(), -1);
+
     const newLoan = {
       prestamista, capital, interes, deudaTotal, cuotaDiaria: cuota,
       saldoPendiente: deudaTotal, montoExigible: 0, pagadoAcumulado: 0,
       fechaInicio: new Date().toISOString(),
-      lastProcessedDate: getLocalTodayString(),
+      lastProcessedDate: yesterdayStr,
       lastManualPaymentDate: null, manualPaymentsCount: 0
     };
 
     await onAdd(newLoan);
     setLoading(false);
+    setPrestamista('');
+    setCapitalStr('');
+    setCuotaStr('');
   };
 
   return (
@@ -584,17 +596,23 @@ function AddLoanTab({ onAdd }) {
         {capital > 0 && (
           <div className="bg-emerald-950/30 p-6 rounded-3xl border border-emerald-500/20 mt-8 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 blur-xl rounded-full"></div>
-            <h4 className="text-[10px] font-black text-emerald-400 mb-5 flex items-center gap-2 uppercase tracking-widest"><AlertCircle size={14} /> Proyección (+20%)</h4>
+            <h4 className="text-[10px] font-black text-emerald-400 mb-5 flex items-center gap-2 uppercase tracking-widest">
+              <AlertCircle size={14} /> 
+              <span>Proyección (+20%)</span>
+            </h4>
             <div className="space-y-4 text-sm font-bold">
               <div className="flex justify-between text-slate-400"><span>BASE:</span> <span>S/ {capital.toFixed(2)}</span></div>
               <div className="flex justify-between text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.5)]"><span>CARGO FIJO:</span> <span>+ S/ {interes.toFixed(2)}</span></div>
-              <div className="flex justify-between pt-4 border-t border-emerald-500/20 text-white text-lg tracking-tight"><span>DEUDA NETA:</span> <span className="text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]">S/ {deudaTotal.toFixed(2)}</span></div>
+              <div className="flex justify-between pt-4 border-t border-emerald-500/20 text-white text-lg tracking-tight">
+                <span>DEUDA NETA:</span> 
+                <span className="text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]">S/ {deudaTotal.toFixed(2)}</span>
+              </div>
             </div>
           </div>
         )}
 
         <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-black py-5 rounded-2xl shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_35px_rgba(6,182,212,0.6)] mt-8 flex justify-center items-center gap-2 uppercase tracking-widest transition-all">
-          {loading ? <Loader2 size={20} className="animate-spin" /> : 'Inicializar Contrato'}
+          {loading ? <Loader2 size={20} className="animate-spin" /> : <span>Inicializar Contrato</span>}
         </button>
       </form>
     </div>
