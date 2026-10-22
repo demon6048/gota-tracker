@@ -8,14 +8,11 @@ import {
 
 // --- Firebase Imports ---
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, collection, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, collection, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
-// --- Inicialización de Firebase con tus llaves ---
-// Esta lógica detecta si estás aquí en la plataforma web o en tu computadora local (VS Code).
-const envConfig = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : null;
-
-const firebaseConfig = envConfig || {
+// --- Inicialización de Firebase con tus llaves directas ---
+const firebaseConfig = {
   apiKey: "AIzaSyD3InxOi9-GczeHB7KuPGkJxIiHKwp7wAI",
   authDomain: "mis-deudas-al-dia-a0754.firebaseapp.com",
   projectId: "mis-deudas-al-dia-a0754",
@@ -27,7 +24,9 @@ const firebaseConfig = envConfig || {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'gota-tracker-app';
+
+// Colección Global Compartida: Para que la PC y el Celular vean la misma información
+const GLOBAL_COLLECTION = 'mis_prestamos';
 
 // --- Utilidades de Fecha ---
 const getLocalTodayString = () => {
@@ -78,15 +77,11 @@ export default function App() {
   const [loadingData, setLoadingData] = useState(true);
   const [paymentModalData, setPaymentModalData] = useState(null);
 
-  // 1. Autenticación Segura
+  // 1. Autenticación Anónima
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (error) {
         console.error("Error en autenticación:", error);
       }
@@ -101,11 +96,12 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Fetch y Lógica "Catch-up" (Auto-Mora)
+  // 2. Fetch y Lógica "Catch-up" (Auto-Mora) Sincronizada
   useEffect(() => {
     if (!user) return;
 
-    const loansRef = collection(db, 'artifacts', appId, 'users', user.uid, 'loans');
+    // Conectamos a la colección global para que todos los dispositivos vean lo mismo
+    const loansRef = collection(db, GLOBAL_COLLECTION);
     
     const unsubscribe = onSnapshot(loansRef, async (snapshot) => {
       const todayStr = getLocalTodayString();
@@ -149,7 +145,7 @@ export default function App() {
           let currentExigible = loan.montoExigible || 0;
           
           try {
-            const loanDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'loans', loan.id);
+            const loanDoc = doc(db, GLOBAL_COLLECTION, loan.id);
             await updateDoc(loanDoc, {
               montoExigible: currentExigible + addExigible,
               lastProcessedDate: todayStr
@@ -204,7 +200,7 @@ export default function App() {
     const nuevoPagado = (loan.pagadoAcumulado || 0) + amountPaid;
 
     try {
-      const loanDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'loans', loan.id);
+      const loanDoc = doc(db, GLOBAL_COLLECTION, loan.id);
       await updateDoc(loanDoc, {
         saldoPendiente: nuevoSaldo,
         montoExigible: nuevoExigible,
@@ -221,7 +217,7 @@ export default function App() {
   const handleEdit = async (id, nuevoSaldo, nuevaCuota, nuevoExigible) => {
     if (!user) return;
     try {
-      const loanDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'loans', id);
+      const loanDoc = doc(db, GLOBAL_COLLECTION, id);
       await updateDoc(loanDoc, {
         saldoPendiente: parseFloat(nuevoSaldo) || 0,
         cuotaDiaria: parseFloat(nuevaCuota) || 0,
@@ -235,7 +231,7 @@ export default function App() {
   const handleAddLoan = async (newLoan) => {
     if (!user) return;
     try {
-      const loansRef = collection(db, 'artifacts', appId, 'users', user.uid, 'loans');
+      const loansRef = collection(db, GLOBAL_COLLECTION);
       await addDoc(loansRef, newLoan);
       setActiveTab('dashboard');
     } catch (error) {
@@ -246,7 +242,7 @@ export default function App() {
   const handleDelete = async (id) => {
     if (!user) return;
     try {
-      const loanDoc = doc(db, 'artifacts', appId, 'users', user.uid, 'loans', id);
+      const loanDoc = doc(db, GLOBAL_COLLECTION, id);
       await deleteDoc(loanDoc);
     } catch (error) {
       console.error("Error al eliminar:", error);
