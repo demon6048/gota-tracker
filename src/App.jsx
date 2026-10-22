@@ -11,8 +11,19 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, collection, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
 
-// --- Inicialización de Firebase (Global) ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+// --- Inicialización de Firebase con tus llaves ---
+// Esta lógica detecta si estás aquí en la plataforma web o en tu computadora local (VS Code).
+const envConfig = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : null;
+
+const firebaseConfig = envConfig || {
+  apiKey: "AIzaSyD3InxOi9-GczeHB7KuPGkJxIiHKwp7wAI",
+  authDomain: "mis-deudas-al-dia-a0754.firebaseapp.com",
+  projectId: "mis-deudas-al-dia-a0754",
+  storageBucket: "mis-deudas-al-dia-a0754.firebasestorage.app",
+  messagingSenderId: "612767332474",
+  appId: "1:612767332474:web:764c1552f668ba7b9ca3c3"
+};
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
