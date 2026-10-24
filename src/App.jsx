@@ -252,8 +252,7 @@ export default function App() {
       setFirebaseStatus('error');
     }
   };
-
-  const handleEdit = async (id, prestamista, telefono, yape, nuevoSaldo, nuevaCuota, nuevoExigible) => {
+  const handleEdit = async (id, prestamista, telefono, yape, nuevoSaldo, nuevaCuota, nuevoExigible, nuevaFecha) => {
     if (!user) return;
     try {
       const loanDoc = doc(db, coleccionGlobal, id);
@@ -263,7 +262,8 @@ export default function App() {
         yape: yape || '',
         saldoPendiente: parseFloat(nuevoSaldo) || 0,
         cuotaDiaria: parseFloat(nuevaCuota) || 0,
-        montoExigible: parseFloat(nuevoExigible) || 0
+        montoExigible: parseFloat(nuevoExigible) || 0,
+        fechaInicio: new Date(nuevaFecha + 'T12:00:00').toISOString()
       });
       const loan = loans.find(l => l.id === id);
       if(loan) await logActivity('EDICION', prestamista || loan.prestamista, `Parámetros modificados manualmente`, 0, id);
@@ -457,6 +457,8 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
   const [editSaldo, setEditSaldo] = useState((loan.saldoPendiente || 0).toString());
   const [editCuota, setEditCuota] = useState((loan.cuotaDiaria || 0).toString());
   const [editExigible, setEditExigible] = useState((loan.montoExigible || 0).toString());
+  const initialDateStr = loan.fechaInicio ? loan.fechaInicio.split('T')[0] : getLocalTodayString();
+  const [editFechaInicio, setEditFechaInicio] = useState(initialDateStr);
 
   // Blindaje matemático y línea de tiempo
   const cuotaSegura = loan.cuotaDiaria > 0 ? loan.cuotaDiaria : 1;
@@ -545,9 +547,15 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
                <input type="number" value={editExigible} onChange={(e) => setEditExigible(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
              </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Cuota Diaria (S/)</label>
-            <input type="number" value={editCuota} onChange={(e) => setEditCuota(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Cuota Diaria (S/)</label>
+              <input type="number" value={editCuota} onChange={(e) => setEditCuota(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Día de Entrega</label>
+              <input type="date" value={editFechaInicio} onChange={(e) => setEditFechaInicio(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-[11px] focus:border-cyan-500 outline-none shadow-inner font-bold" />
+            </div>
           </div>
         </div>
         
@@ -556,7 +564,7 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
             <Trash2 size={16}/> PURGAR
           </button>
           <button onClick={() => { 
-              onEdit(loan.id, editPrestamista, editWhatsApp, editYape, editSaldo, editCuota, editExigible); 
+              onEdit(loan.id, editPrestamista, editWhatsApp, editYape, editSaldo, editCuota, editExigible, editFechaInicio); 
               setIsEditing(false); 
             }} 
             className="flex-1 bg-cyan-500 text-black py-3 rounded-2xl text-xs font-black flex justify-center items-center gap-2 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] transition-all">
