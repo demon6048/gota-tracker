@@ -251,17 +251,20 @@ export default function App() {
     }
   };
 
-  const handleEdit = async (id, nuevoSaldo, nuevaCuota, nuevoExigible) => {
+  const handleEdit = async (id, prestamista, telefono, yape, nuevoSaldo, nuevaCuota, nuevoExigible) => {
     if (!user) return;
     try {
       const loanDoc = doc(db, coleccionGlobal, id);
       await updateDoc(loanDoc, {
+        prestamista: prestamista || '',
+        telefono: telefono || '',
+        yape: yape || '',
         saldoPendiente: parseFloat(nuevoSaldo) || 0,
         cuotaDiaria: parseFloat(nuevaCuota) || 0,
         montoExigible: parseFloat(nuevoExigible) || 0
       });
       const loan = loans.find(l => l.id === id);
-      if(loan) await logActivity('EDICION', loan.prestamista, `Parámetros modificados manualmente para ${loan.prestamista}`);
+      if(loan) await logActivity('EDICION', prestamista || loan.prestamista, `Parámetros modificados manualmente`);
     } catch (error) {
       console.error("Error al editar:", error);
       setFirebaseStatus('error');
@@ -412,6 +415,11 @@ function DashboardTab({ loans, onPayRequest, onEdit, onDelete }) {
 function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
   const [isEditing, setIsEditing] = useState(false);
   const [copied, setCopied] = useState(false);
+  
+  // Estados de edición
+  const [editPrestamista, setEditPrestamista] = useState(loan.prestamista || '');
+  const [editWhatsApp, setEditWhatsApp] = useState(loan.telefono || '');
+  const [editYape, setEditYape] = useState(loan.yape || '');
   const [editSaldo, setEditSaldo] = useState((loan.saldoPendiente || 0).toString());
   const [editCuota, setEditCuota] = useState((loan.cuotaDiaria || 0).toString());
   const [editExigible, setEditExigible] = useState((loan.montoExigible || 0).toString());
@@ -454,13 +462,26 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
 
   const handleWhatsApp = () => {
     if (!loan.telefono) return;
-    let mensaje = '';
+    
+    const hoy = new Date();
+    const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+
+    // Emojis creados a partir de su código Unicode (100% a prueba de fallos)
+    const iCal = '\uD83D\uDCC5';   // Calendario
+    const iReloj = '\u23F0';       // Reloj
+    const iTarjeta = '\uD83D\uDCB3'; // Tarjeta
+    const iDinero = '\uD83D\uDCB0';  // Bolsa de dinero
+    const iAlerta = '\u26A0\uFE0F';  // Advertencia
+
+    let texto = '';
     if (yaPagadoHoy && loan.ultimoPagoMonto) {
-      mensaje = `Hola ${loan.prestamista}, adjunto mi comprobante del pago de hoy por S/ ${loan.ultimoPagoMonto.toFixed(2)}.%0A%0A💰 Saldo restante: S/ ${loan.saldoPendiente.toFixed(2)}%0A%0A¡Saludos!`;
+      texto = `Hola ${loan.prestamista}, adjunto mi comprobante del pago de hoy mediante billetera digital.\n\n${iCal} Fecha: ${fechaStr}\n${iReloj} Hora: ${horaStr}\n${iTarjeta} Abono: S/ ${loan.ultimoPagoMonto.toFixed(2)}\n${iDinero} Saldo restante: S/ ${loan.saldoPendiente.toFixed(2)}\n\n¡Saludos!`;
     } else {
-      mensaje = `Hola ${loan.prestamista}, te informo el estado de cuenta:%0A%0A💰 Restante: S/ ${loan.saldoPendiente.toFixed(2)}%0A⚠️ Exigible Actual: S/ ${exigible.toFixed(2)}%0A%0A¡Saludos!`;
+      texto = `Hola ${loan.prestamista}, te informo el estado de cuenta al día de hoy.\n\n${iCal} Fecha: ${fechaStr}\n${iReloj} Hora: ${horaStr}\n${iDinero} Restante: S/ ${loan.saldoPendiente.toFixed(2)}\n${iAlerta} Exigible Actual: S/ ${exigible.toFixed(2)}\n\n¡Saludos!`;
     }
-    window.open(`https://wa.me/51${loan.telefono}?text=${mensaje}`, '_blank');
+    
+    window.open(`https://wa.me/51${loan.telefono}?text=${encodeURIComponent(texto)}`, '_blank');
   };
 
   if (isEditing) {
@@ -470,25 +491,47 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
           <h4 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">AJUSTAR DATOS</h4>
           <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full transition-colors"><X size={16} /></button>
         </div>
+        
         <div className="space-y-4 mb-6">
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Deuda Restante (S/)</label>
-            <input type="number" value={editSaldo} onChange={(e) => setEditSaldo(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Prestamista</label>
+            <input type="text" value={editPrestamista} onChange={(e) => setEditPrestamista(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
           </div>
-          <div>
-            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Monto Exigible (S/)</label>
-            <input type="number" value={editExigible} onChange={(e) => setEditExigible(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">WhatsApp</label>
+              <input type="tel" value={editWhatsApp} onChange={(e) => setEditWhatsApp(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Yape</label>
+              <input type="tel" value={editYape} onChange={(e) => setEditYape(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+             <div>
+               <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Deuda Restante</label>
+               <input type="number" value={editSaldo} onChange={(e) => setEditSaldo(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+             </div>
+             <div>
+               <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Monto Exigible</label>
+               <input type="number" value={editExigible} onChange={(e) => setEditExigible(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+             </div>
           </div>
           <div>
             <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Cuota Diaria (S/)</label>
             <input type="number" value={editCuota} onChange={(e) => setEditCuota(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
           </div>
         </div>
+        
         <div className="flex gap-3">
           <button onClick={() => onDelete(loan.id)} className="flex-1 bg-rose-500/10 border border-rose-500/30 text-rose-400 py-3 rounded-2xl text-xs font-bold flex justify-center items-center gap-2 hover:bg-rose-500/20 transition-all shadow-[0_0_15px_rgba(244,63,94,0.1)] hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]">
             <Trash2 size={16}/> PURGAR
           </button>
-          <button onClick={() => { onEdit(loan.id, editSaldo, editCuota, editExigible); setIsEditing(false); }} className="flex-1 bg-cyan-500 text-black py-3 rounded-2xl text-xs font-black flex justify-center items-center gap-2 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] transition-all">
+          <button onClick={() => { 
+              onEdit(loan.id, editPrestamista, editWhatsApp, editYape, editSaldo, editCuota, editExigible); 
+              setIsEditing(false); 
+            }} 
+            className="flex-1 bg-cyan-500 text-black py-3 rounded-2xl text-xs font-black flex justify-center items-center gap-2 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] transition-all">
             <Save size={16} /> CONFIRMAR
           </button>
         </div>
@@ -621,8 +664,20 @@ function PaymentModal({ loan, onClose, onSubmit }) {
   const handleSendReceipt = () => {
     if (!loan.telefono) return;
     const saldoActualizado = (loan.saldoPendiente - paidAmount).toFixed(2);
-    const mensaje = `Hola ${loan.prestamista}, te acabo de transferir S/ ${paidAmount.toFixed(2)}.%0A%0A💰 Mi saldo restante es S/ ${saldoActualizado}.%0A%0A¡Saludos!`;
-    window.open(`https://wa.me/51${loan.telefono}?text=${mensaje}`, '_blank');
+    
+    const hoy = new Date();
+    const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+    
+    // Emojis creados a partir de su código Unicode
+    const iCal = '\uD83D\uDCC5';
+    const iReloj = '\u23F0';
+    const iTarjeta = '\uD83D\uDCB3';
+    const iDinero = '\uD83D\uDCB0';
+
+    const texto = `Hola ${loan.prestamista}, adjunto mi comprobante del pago de hoy mediante billetera digital.\n\n${iCal} Fecha: ${fechaStr}\n${iReloj} Hora: ${horaStr}\n${iTarjeta} Abono: S/ ${paidAmount.toFixed(2)}\n${iDinero} Saldo restante: S/ ${saldoActualizado}\n\n¡Saludos!`;
+    
+    window.open(`https://wa.me/51${loan.telefono}?text=${encodeURIComponent(texto)}`, '_blank');
     onClose();
   };
 
@@ -645,7 +700,7 @@ function PaymentModal({ loan, onClose, onSubmit }) {
                 <MessageCircle size={22} /> Enviar Comprobante
               </button>
             ) : (
-              <p className="text-amber-500/80 text-[10px] font-bold uppercase tracking-widest mb-4">No hay número de WhatsApp registrado para enviar comprobante.</p>
+              <p className="text-amber-500/80 text-[10px] font-bold uppercase tracking-widest mb-4">No hay número de WhatsApp registrado.</p>
             )}
             
             <button onClick={onClose} className="w-full bg-white/5 border border-white/10 text-slate-300 font-bold py-4 rounded-2xl hover:bg-white/10 transition-colors uppercase tracking-widest text-xs">
