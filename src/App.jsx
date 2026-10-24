@@ -394,7 +394,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* Content Area */}
+        {/* Content Area - Scrollbar hidden in CSS classes */}
         <main className="flex-1 overflow-y-auto p-4 pb-28 relative z-10 scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {activeTab === 'dashboard' && <DashboardTab loans={loans} onPayRequest={setPaymentModalData} onEdit={handleEdit} onDelete={handleDelete} />}
           {activeTab === 'add' && <AddLoanTab onAdd={handleAddLoan} />}
@@ -501,21 +501,13 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
     const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
 
-    // FIX WHATSAPP UNICODE
-    const iCal = '\uD83D\uDCC5'; 
-    const iReloj = '\u23F0';    
-    const iTarjeta = '\uD83D\uDCB3'; 
-    const iDinero = '\uD83D\uDCB0'; 
-    const iAlerta = '\u26A0\uFE0F'; 
-
     let texto = '';
     if (yaPagadoHoy && loan.ultimoPagoMonto) {
-      texto = `Hola ${loan.prestamista}, adjunto mi comprobante del pago de hoy mediante billetera digital.\n\n${iCal} Fecha: ${fechaStr}\n${iReloj} Hora: ${horaStr}\n${iTarjeta} Abono: S/ ${loan.ultimoPagoMonto.toFixed(2)}\n${iDinero} Saldo restante: S/ ${loan.saldoPendiente.toFixed(2)}\n\n¡Saludos!`;
+      texto = `\uD83E\uDD1D Hola ${loan.prestamista}, adjunto mi comprobante del pago de hoy mediante billetera digital.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${loan.ultimoPagoMonto.toFixed(2)}\n\uD83D\uDCB0 Saldo restante: S/ ${loan.saldoPendiente.toFixed(2)}\n\n\u2728 \u00A1Saludos!`;
     } else {
-      texto = `Hola ${loan.prestamista}, te informo el estado de cuenta al día de hoy.\n\n${iCal} Fecha: ${fechaStr}\n${iReloj} Hora: ${horaStr}\n${iDinero} Restante: S/ ${loan.saldoPendiente.toFixed(2)}\n${iAlerta} Exigible Actual: S/ ${exigible.toFixed(2)}\n\n¡Saludos!`;
+      texto = `\uD83E\uDD1D Hola ${loan.prestamista}, te informo el estado de cuenta al día de hoy.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB0 Restante: S/ ${loan.saldoPendiente.toFixed(2)}\n\u26A0\uFE0F Exigible Actual: S/ ${exigible.toFixed(2)}\n\n\u2728 \u00A1Saludos!`;
     }
     
-    // Usar API oficial y codificación segura
     const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(texto)}`;
     window.open(urlSegura, '_blank');
   };
@@ -704,16 +696,9 @@ function PaymentModal({ loan, onClose, onSubmit }) {
     const hoy = new Date();
     const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-    
-    // FIX WHATSAPP UNICODE
-    const iCal = '\uD83D\uDCC5';
-    const iReloj = '\u23F0';
-    const iTarjeta = '\uD83D\uDCB3';
-    const iDinero = '\uD83D\uDCB0';
 
-    const texto = `Hola ${loan.prestamista}, adjunto mi comprobante del pago de hoy mediante billetera digital.\n\n${iCal} Fecha: ${fechaStr}\n${iReloj} Hora: ${horaStr}\n${iTarjeta} Abono: S/ ${paidAmount.toFixed(2)}\n${iDinero} Saldo restante: S/ ${saldoActualizado}\n\n¡Saludos!`;
+    const texto = `\uD83E\uDD1D Hola ${loan.prestamista}, adjunto mi comprobante del pago de hoy mediante billetera digital.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${paidAmount.toFixed(2)}\n\uD83D\uDCB0 Saldo restante: S/ ${saldoActualizado}\n\n\u2728 \u00A1Saludos!`;
     
-    // Usar API oficial y codificación segura
     const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(texto)}`;
     window.open(urlSegura, '_blank');
     
@@ -817,8 +802,10 @@ function AddLoanTab({ onAdd }) {
   // Cálculos de la Máquina del Tiempo
   const todayStr = getLocalTodayString();
   let diasTranscurridos = 0;
-  if (fechaInicioStr && fechaInicioStr <= todayStr) {
-    let checkDate = fechaInicioStr;
+  
+  // Se cobra a partir del día SIGUIENTE de la entrega
+  if (fechaInicioStr && fechaInicioStr < todayStr) {
+    let checkDate = addDaysToDateStr(fechaInicioStr, 1);
     while (checkDate <= todayStr) {
       if (getDayOfWeek(checkDate) !== 0) diasTranscurridos++;
       checkDate = addDaysToDateStr(checkDate, 1);
@@ -941,7 +928,7 @@ function AddLoanTab({ onAdd }) {
               </div>
               
               {/* Previsualización del cálculo de fechas */}
-              {(diasTranscurridos > 1 || pagadoPrevio > 0) && (
+              {(diasTranscurridos > 0 || pagadoPrevio > 0) && (
                 <div className="mt-4 pt-4 border-t border-dashed border-cyan-500/30 space-y-2">
                    <div className="flex justify-between text-[10px] text-cyan-400 uppercase tracking-widest">
                      <span>Días Transcurridos:</span> <span>{diasTranscurridos} días hábiles</span>
