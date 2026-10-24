@@ -761,6 +761,11 @@ function AddLoanTab({ onAdd }) {
   const [capitalStr, setCapitalStr] = useState('');
   const [porcentajeStr, setPorcentajeStr] = useState('20'); 
   const [cuotaStr, setCuotaStr] = useState('');
+  
+  // NUEVOS ESTADOS: Máquina del tiempo
+  const [fechaInicioStr, setFechaInicioStr] = useState(getLocalTodayString());
+  const [pagadoPrevioStr, setPagadoPrevioStr] = useState('');
+
   const [loading, setLoading] = useState(false);
 
   const capital = parseFloat(capitalStr) || 0;
@@ -768,13 +773,27 @@ function AddLoanTab({ onAdd }) {
   const interes = capital * (porcentaje / 100);
   const deudaTotal = capital + interes;
   const cuota = parseFloat(cuotaStr) || 0;
+  const pagadoPrevio = parseFloat(pagadoPrevioStr) || 0;
+
+  // Cálculos de la Máquina del Tiempo (Preview en vivo)
+  const todayStr = getLocalTodayString();
+  let diasTranscurridos = 0;
+  if (fechaInicioStr && fechaInicioStr <= todayStr) {
+    let checkDate = fechaInicioStr;
+    while (checkDate <= todayStr) {
+      if (getDayOfWeek(checkDate) !== 0) diasTranscurridos++;
+      checkDate = addDaysToDateStr(checkDate, 1);
+    }
+  }
+  
+  const saldoActual = Math.max(0, deudaTotal - pagadoPrevio);
+  const deudaHipotetica = diasTranscurridos * cuota;
+  const exigibleReal = Math.max(0, deudaHipotetica - pagadoPrevio);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!prestamista || capital <= 0 || cuota <= 0) return;
     setLoading(true);
-    
-    const yesterdayStr = addDaysToDateStr(getLocalTodayString(), -1);
 
     const newLoan = {
       prestamista, 
@@ -785,11 +804,11 @@ function AddLoanTab({ onAdd }) {
       interes, 
       deudaTotal, 
       cuotaDiaria: cuota,
-      saldoPendiente: deudaTotal, 
-      montoExigible: 0, 
-      pagadoAcumulado: 0,
-      fechaInicio: new Date().toISOString(),
-      lastProcessedDate: yesterdayStr,
+      saldoPendiente: saldoActual, 
+      montoExigible: exigibleReal, 
+      pagadoAcumulado: pagadoPrevio,
+      fechaInicio: new Date(fechaInicioStr + 'T12:00:00').toISOString(),
+      lastProcessedDate: todayStr, // Se marca procesado hasta HOY
       lastManualPaymentDate: null, 
       manualPaymentsCount: 0,
       ultimoPagoMonto: 0
@@ -803,6 +822,8 @@ function AddLoanTab({ onAdd }) {
     setCapitalStr('');
     setPorcentajeStr('20');
     setCuotaStr('');
+    setFechaInicioStr(getLocalTodayString());
+    setPagadoPrevioStr('');
   };
 
   return (
@@ -843,8 +864,25 @@ function AddLoanTab({ onAdd }) {
             </div>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Tasa de Descuento Diario (S/)</label>
+            <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Cuota Diaria (S/)</label>
             <input type="number" value={cuotaStr} onChange={(e) => setCuotaStr(e.target.value)} required min="1" className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-5 py-4 font-bold outline-none focus:border-cyan-500 focus:shadow-[0_0_15px_rgba(6,182,212,0.2)] transition-all" placeholder="25" />
+          </div>
+        </div>
+
+        {/* Máquina del Tiempo (Migración de Deudas) */}
+        <div className="pt-4 border-t border-white/10 space-y-4">
+          <h3 className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+             <Calendar size={14}/> Sincronizar Préstamo Antiguo
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Fecha de Entrega</label>
+              <input type="date" value={fechaInicioStr} onChange={(e) => setFechaInicioStr(e.target.value)} required className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 font-bold outline-none focus:border-cyan-500 transition-all text-xs" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Ya pagado (S/)</label>
+              <input type="number" value={pagadoPrevioStr} onChange={(e) => setPagadoPrevioStr(e.target.value)} min="0" className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 font-bold outline-none focus:border-cyan-500 transition-all text-xs" placeholder="0" />
+            </div>
           </div>
         </div>
 
@@ -859,12 +897,31 @@ function AddLoanTab({ onAdd }) {
               <div className="flex justify-between text-slate-400"><span>BASE:</span> <span>S/ {capital.toFixed(2)}</span></div>
               <div className="flex justify-between text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.5)]"><span>CARGO FIJO:</span> <span>+ S/ {interes.toFixed(2)}</span></div>
               <div className="flex justify-between pt-4 border-t border-emerald-500/20 text-white text-lg tracking-tight">
-                <span>DEUDA NETA:</span> 
+                <span>DEUDA ORIGINAL:</span> 
                 <span className="text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]">S/ {deudaTotal.toFixed(2)}</span>
               </div>
+              
+              {/* Previsualización del cálculo de fechas */}
+              {(diasTranscurridos > 1 || pagadoPrevio > 0) && (
+                <div className="mt-4 pt-4 border-t border-dashed border-cyan-500/30 space-y-2">
+                   <div className="flex justify-between text-[10px] text-cyan-400 uppercase tracking-widest">
+                     <span>Días Transcurridos:</span> <span>{diasTranscurridos} días hábiles</span>
+                   </div>
+                   <div className="flex justify-between text-[10px] text-slate-400 uppercase tracking-widest">
+                     <span>Ya cobrado:</span> <span>- S/ {pagadoPrevio.toFixed(2)}</span>
+                   </div>
+                   <div className="flex justify-between text-amber-400 font-black mt-2 tracking-tight">
+                     <span>EXIGIBLE HOY (MORA):</span> <span>S/ {exigibleReal.toFixed(2)}</span>
+                   </div>
+                   <div className="flex justify-between text-emerald-300 font-black tracking-tight">
+                     <span>SALDO RESTANTE:</span> <span>S/ {saldoActual.toFixed(2)}</span>
+                   </div>
+                </div>
+              )}
+
               {cuota > 0 && (
-                 <div className="text-center mt-2 text-[10px] text-emerald-500/80 uppercase tracking-widest">
-                   Se pagará en {Math.ceil(deudaTotal / cuota)} días hábiles
+                 <div className="text-center mt-4 text-[10px] text-emerald-500/80 uppercase tracking-widest">
+                   Se terminará de pagar en aprox. {Math.ceil(saldoActual / cuota)} días hábiles
                  </div>
               )}
             </div>
