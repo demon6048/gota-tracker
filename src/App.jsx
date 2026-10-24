@@ -4,7 +4,8 @@ import {
   CheckCircle, TrendingUp, Edit2, 
   Save, X, Loader2, Lock, AlertCircle, Trash2,
   Zap, ShieldAlert, Wifi, WifiOff, Loader,
-  MessageCircle, Copy, Check, History, Clock, FileText
+  MessageCircle, Copy, Check, History, Clock, FileText,
+  RotateCcw
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -129,7 +130,7 @@ export default function App() {
       } else {
         const fetchedLoans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Lógica de Mora
+        // Lógica de Mora Automática
         for (let loan of fetchedLoans) {
           if (loan.saldoPendiente <= 0) continue;
 
@@ -173,7 +174,7 @@ export default function App() {
     const historyRef = collection(db, coleccionHistorial);
     const unsubHistory = onSnapshot(historyRef, (snapshot) => {
       const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Ordenar localmente por fecha (más reciente primero) para evitar problemas de índices en Firebase
+      // Ordenar por fecha reciente
       logs.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
       setHistoryLogs(logs);
     });
@@ -205,13 +206,14 @@ export default function App() {
   }, [loans]);
 
   // --- Función de Registro de Historial ---
-  const logActivity = async (tipo, prestamista, descripcion, monto = 0) => {
+  const logActivity = async (tipo, prestamista, descripcion, monto = 0, loanId = null) => {
     try {
       await addDoc(collection(db, coleccionHistorial), {
         tipo,
         prestamista,
         descripcion,
         monto,
+        loanId,
         fecha: new Date().toISOString()
       });
     } catch (error) {
@@ -243,8 +245,8 @@ export default function App() {
         ultimoPagoMonto: amountPaid 
       });
 
-      // Guardar en el Historial
-      await logActivity('PAGO', loan.prestamista, `Abono registrado a favor de ${loan.prestamista}`, amountPaid);
+      // Guardar en el Historial adjuntando el ID del préstamo
+      await logActivity('PAGO', loan.prestamista, `Abono registrado a favor de ${loan.prestamista}`, amountPaid, loan.id);
     } catch (error) {
       console.error("Error al registrar pago:", error);
       setFirebaseStatus('error');
@@ -264,7 +266,7 @@ export default function App() {
         montoExigible: parseFloat(nuevoExigible) || 0
       });
       const loan = loans.find(l => l.id === id);
-      if(loan) await logActivity('EDICION', prestamista || loan.prestamista, `Parámetros modificados manualmente`);
+      if(loan) await logActivity('EDICION', prestamista || loan.prestamista, `Parámetros modificados manualmente`, 0, id);
     } catch (error) {
       console.error("Error al editar:", error);
       setFirebaseStatus('error');
@@ -275,10 +277,10 @@ export default function App() {
     if (!user) return;
     try {
       const loansRef = collection(db, coleccionGlobal);
-      await addDoc(loansRef, newLoan);
+      const docRef = await addDoc(loansRef, newLoan);
       
       // Guardar en el Historial
-      await logActivity('NUEVO', newLoan.prestamista, `Se inyectó un nuevo préstamo a ${newLoan.prestamista}`, newLoan.capital);
+      await logActivity('NUEVO', newLoan.prestamista, `Se inyectó un nuevo préstamo a ${newLoan.prestamista}`, newLoan.capital, docRef.id);
       
       setActiveTab('dashboard');
     } catch (error) {
@@ -292,8 +294,7 @@ export default function App() {
     try {
       const loan = loans.find(l => l.id === id);
       if (loan) {
-        // Guardar en el Historial ANTES de borrar
-        await logActivity('ELIMINACION', loan.prestamista, `Se eliminó por completo el contrato de ${loan.prestamista}`);
+        await logActivity('ELIMINACION', loan.prestamista, `Se eliminó por completo el contrato de ${loan.prestamista}`, 0, id);
       }
       
       const loanDoc = doc(db, coleccionGlobal, id);
@@ -301,6 +302,37 @@ export default function App() {
     } catch (error) {
       console.error("Error al eliminar:", error);
       setFirebaseStatus('error');
+    }
+  };
+
+  // --- MOTOR DE REVERSA ---
+  const handleRevertLog = async (log) => {
+    if (!user) return;
+    if (log.tipo !== 'PAGO') return; 
+
+    try {
+      // 1. Encontrar el préstamo
+      const loan = loans.find(l => l.id === log.loanId || l.prestamista === log.prestamista);
+      
+      if (loan) {
+        // 2. Devolver la deuda y restaurar candados
+        const nuevoSaldo = loan.saldoPendiente + log.monto;
+        const nuevoPagado = Math.max(0, (loan.pagadoAcumulado || 0) - log.monto);
+        
+        await updateDoc(doc(db, coleccionGlobal, loan.id), {
+          saldoPendiente: nuevoSaldo,
+          pagadoAcumulado: nuevoPagado,
+          lastManualPaymentDate: null, 
+          manualPaymentsCount: Math.max(0, (loan.manualPaymentsCount || 1) - 1)
+        });
+      }
+
+      // 3. Borrar el historial antiguo y crear uno nuevo indicando la reversión
+      await deleteDoc(doc(db, coleccionHistorial, log.id));
+      await logActivity('REVERSO', log.prestamista, `Reversión de pago erróneo.`, log.monto, log.loanId);
+      
+    } catch (error) {
+      console.error("Error al revertir pago:", error);
     }
   };
 
@@ -317,16 +349,16 @@ export default function App() {
   }
 
   return (
-    <div className="flex justify-center bg-[#030712] min-h-screen font-sans text-slate-200">
-      <div className="w-full max-w-md bg-[#050505] min-h-screen shadow-2xl flex flex-col relative overflow-hidden ring-1 ring-white/5">
+    // FIX PWA: h-[100dvh] y overflow-hidden evitan que la página entera haga scroll, anclando la barra inferior.
+    <div className="flex justify-center bg-[#030712] h-[100dvh] font-sans text-slate-200 overflow-hidden">
+      <div className="w-full max-w-md bg-[#050505] h-full shadow-2xl flex flex-col relative ring-1 ring-white/5">
         
         {/* Fondo Futurista */}
         <div className="absolute top-[-10%] left-[-10%] w-[120%] h-[40%] bg-gradient-to-b from-emerald-900/30 to-transparent blur-3xl pointer-events-none"></div>
         <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-900/10 blur-[80px] pointer-events-none"></div>
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[80%] h-64 bg-emerald-500/5 blur-[100px] pointer-events-none"></div>
 
         {/* Header */}
-        <header className="p-6 pb-8 z-10 relative shrink-0 border-b border-white/10 bg-black/40 backdrop-blur-xl">
+        <header className="p-6 pb-6 z-10 relative shrink-0 border-b border-white/10 bg-black/40 backdrop-blur-xl">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-300 flex items-center gap-2 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
               <Zap className="text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,1)]" size={28} /> 
@@ -363,20 +395,22 @@ export default function App() {
         </header>
 
         {/* Content Area */}
-        <main className="flex-1 overflow-y-auto p-4 pb-28 relative z-10 scroll-smooth">
+        <main className="flex-1 overflow-y-auto p-4 pb-28 relative z-10 scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {activeTab === 'dashboard' && <DashboardTab loans={loans} onPayRequest={setPaymentModalData} onEdit={handleEdit} onDelete={handleDelete} />}
           {activeTab === 'add' && <AddLoanTab onAdd={handleAddLoan} />}
-          {activeTab === 'history' && <HistoryTab logs={historyLogs} />}
+          {activeTab === 'history' && <HistoryTab logs={historyLogs} onRevert={handleRevertLog} />}
           {activeTab === 'insights' && <InsightsTab stats={stats} loans={loans} />}
         </main>
 
-        {/* Bottom Nav */}
-        <nav className="absolute bottom-6 left-2 right-2 bg-slate-900/90 backdrop-blur-2xl border border-white/10 flex justify-around p-2 rounded-3xl z-20 shadow-[0_10px_40px_rgba(0,0,0,0.8)]">
-          <NavItem icon={<Home size={20} />} label="Panel" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
-          <NavItem icon={<PlusCircle size={20} />} label="Nuevo" isActive={activeTab === 'add'} onClick={() => setActiveTab('add')} />
-          <NavItem icon={<History size={20} />} label="Historial" isActive={activeTab === 'history'} onClick={() => setActiveTab('history')} />
-          <NavItem icon={<PieChart size={20} />} label="Datos" isActive={activeTab === 'insights'} onClick={() => setActiveTab('insights')} />
-        </nav>
+        {/* FIX NAV: Bottom Nav más compacta y estática */}
+        <div className="absolute bottom-0 left-0 right-0 p-3 pointer-events-none z-30 flex justify-center bg-gradient-to-t from-black/80 to-transparent pt-8">
+          <nav className="pointer-events-auto bg-slate-900/95 backdrop-blur-2xl border border-white/10 flex justify-around p-1.5 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-full max-w-[380px]">
+            <NavItem icon={<Home size={18} />} label="Panel" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+            <NavItem icon={<PlusCircle size={18} />} label="Nuevo" isActive={activeTab === 'add'} onClick={() => setActiveTab('add')} />
+            <NavItem icon={<History size={18} />} label="Registro" isActive={activeTab === 'history'} onClick={() => setActiveTab('history')} />
+            <NavItem icon={<PieChart size={18} />} label="Datos" isActive={activeTab === 'insights'} onClick={() => setActiveTab('insights')} />
+          </nav>
+        </div>
 
         {paymentModalData && (
           <PaymentModal loan={paymentModalData} onClose={() => setPaymentModalData(null)} onSubmit={executePayment} />
@@ -467,12 +501,12 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
     const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
 
-    // Emojis creados a partir de su código Unicode (100% a prueba de fallos)
-    const iCal = '\uD83D\uDCC5';   // Calendario
-    const iReloj = '\u23F0';       // Reloj
-    const iTarjeta = '\uD83D\uDCB3'; // Tarjeta
-    const iDinero = '\uD83D\uDCB0';  // Bolsa de dinero
-    const iAlerta = '\u26A0\uFE0F';  // Advertencia
+    // FIX WHATSAPP UNICODE
+    const iCal = '\uD83D\uDCC5'; 
+    const iReloj = '\u23F0';    
+    const iTarjeta = '\uD83D\uDCB3'; 
+    const iDinero = '\uD83D\uDCB0'; 
+    const iAlerta = '\u26A0\uFE0F'; 
 
     let texto = '';
     if (yaPagadoHoy && loan.ultimoPagoMonto) {
@@ -481,7 +515,9 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
       texto = `Hola ${loan.prestamista}, te informo el estado de cuenta al día de hoy.\n\n${iCal} Fecha: ${fechaStr}\n${iReloj} Hora: ${horaStr}\n${iDinero} Restante: S/ ${loan.saldoPendiente.toFixed(2)}\n${iAlerta} Exigible Actual: S/ ${exigible.toFixed(2)}\n\n¡Saludos!`;
     }
     
-    window.open(`https://wa.me/51${loan.telefono}?text=${encodeURIComponent(texto)}`, '_blank');
+    // Usar API oficial y codificación segura
+    const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(texto)}`;
+    window.open(urlSegura, '_blank');
   };
 
   if (isEditing) {
@@ -669,7 +705,7 @@ function PaymentModal({ loan, onClose, onSubmit }) {
     const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
     
-    // Emojis creados a partir de su código Unicode
+    // FIX WHATSAPP UNICODE
     const iCal = '\uD83D\uDCC5';
     const iReloj = '\u23F0';
     const iTarjeta = '\uD83D\uDCB3';
@@ -677,7 +713,10 @@ function PaymentModal({ loan, onClose, onSubmit }) {
 
     const texto = `Hola ${loan.prestamista}, adjunto mi comprobante del pago de hoy mediante billetera digital.\n\n${iCal} Fecha: ${fechaStr}\n${iReloj} Hora: ${horaStr}\n${iTarjeta} Abono: S/ ${paidAmount.toFixed(2)}\n${iDinero} Saldo restante: S/ ${saldoActualizado}\n\n¡Saludos!`;
     
-    window.open(`https://wa.me/51${loan.telefono}?text=${encodeURIComponent(texto)}`, '_blank');
+    // Usar API oficial y codificación segura
+    const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(texto)}`;
+    window.open(urlSegura, '_blank');
+    
     onClose();
   };
 
@@ -762,7 +801,7 @@ function AddLoanTab({ onAdd }) {
   const [porcentajeStr, setPorcentajeStr] = useState('20'); 
   const [cuotaStr, setCuotaStr] = useState('');
   
-  // NUEVOS ESTADOS: Máquina del tiempo
+  // ESTADOS MÁQUINA DEL TIEMPO
   const [fechaInicioStr, setFechaInicioStr] = useState(getLocalTodayString());
   const [pagadoPrevioStr, setPagadoPrevioStr] = useState('');
 
@@ -775,7 +814,7 @@ function AddLoanTab({ onAdd }) {
   const cuota = parseFloat(cuotaStr) || 0;
   const pagadoPrevio = parseFloat(pagadoPrevioStr) || 0;
 
-  // Cálculos de la Máquina del Tiempo (Preview en vivo)
+  // Cálculos de la Máquina del Tiempo
   const todayStr = getLocalTodayString();
   let diasTranscurridos = 0;
   if (fechaInicioStr && fechaInicioStr <= todayStr) {
@@ -827,10 +866,10 @@ function AddLoanTab({ onAdd }) {
   };
 
   return (
-    <div className="relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 mb-8 tracking-tighter uppercase">Generar Contrato</h2>
+    <div className="relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8">
+      <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 mb-6 tracking-tighter uppercase">Generar Contrato</h2>
       
-      <form onSubmit={handleSubmit} className="bg-white/5 backdrop-blur-xl p-8 rounded-[32px] border border-white/10 space-y-6 shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
+      <form onSubmit={handleSubmit} className="bg-white/5 backdrop-blur-xl p-6 sm:p-8 rounded-[32px] border border-white/10 space-y-6 shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
         
         {/* Datos Personales */}
         <div className="space-y-4">
@@ -936,7 +975,7 @@ function AddLoanTab({ onAdd }) {
   );
 }
 
-function HistoryTab({ logs }) {
+function HistoryTab({ logs, onRevert }) {
   if (!logs || logs.length === 0) {
     return (
       <div className="text-center p-10 mt-10 relative z-10">
@@ -948,7 +987,7 @@ function HistoryTab({ logs }) {
   }
 
   return (
-    <div className="space-y-4 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-4 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8">
       <div className="mb-6 mt-2 flex items-center gap-3">
         <History className="text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.8)]" size={24} />
         <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 tracking-tighter uppercase">Bitácora de Auditoría</h2>
@@ -976,6 +1015,10 @@ function HistoryTab({ logs }) {
             style = "bg-amber-950/20 border-amber-500/20";
             icon = <Edit2 size={14} className="text-amber-500" />;
             accent = "text-amber-400";
+          } else if (log.tipo === 'REVERSO') {
+            style = "bg-fuchsia-950/20 border-fuchsia-500/20";
+            icon = <RotateCcw size={14} className="text-fuchsia-500" />;
+            accent = "text-fuchsia-400";
           }
 
           return (
@@ -985,9 +1028,17 @@ function HistoryTab({ logs }) {
                   {icon}
                   <span className={`text-[10px] font-black uppercase tracking-widest ${accent}`}>{log.tipo}</span>
                 </div>
-                <div className="text-right">
-                   <p className="text-[10px] text-slate-500 font-bold uppercase">{formatDate(log.fecha)}</p>
-                   <p className="text-[9px] text-slate-600">{formatTime(log.fecha)}</p>
+                <div className="text-right flex items-center gap-3">
+                   <div>
+                     <p className="text-[10px] text-slate-500 font-bold uppercase">{formatDate(log.fecha)}</p>
+                     <p className="text-[9px] text-slate-600">{formatTime(log.fecha)}</p>
+                   </div>
+                   {/* Botón Mágico de Reversa (Sólo para pagos) */}
+                   {log.tipo === 'PAGO' && (
+                     <button onClick={() => onRevert(log)} className="bg-rose-500/10 text-rose-500 p-1.5 rounded-lg border border-rose-500/30 hover:bg-rose-500/30 transition-all" title="Anular este pago">
+                       <Trash2 size={14} />
+                     </button>
+                   )}
                 </div>
               </div>
               <p className="text-sm font-bold text-white tracking-wide">{log.descripcion}</p>
@@ -1008,7 +1059,7 @@ function InsightsTab({ stats, loans }) {
   const porcInteres = (stats.totalIntereses / total) * 100;
 
   return (
-    <div className="space-y-6 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-6 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8">
       <div className="mb-8 mt-2 flex items-center gap-3">
          <PieChart className="text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]" size={24} />
          <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 tracking-tighter uppercase">Telemetría</h2>
@@ -1040,10 +1091,10 @@ function InsightsTab({ stats, loans }) {
 
 function NavItem({ icon, label, isActive, onClick }) {
   return (
-    <button onClick={onClick} className={`flex flex-col items-center justify-center w-[72px] h-14 gap-1 transition-all duration-300 relative ${isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+    <button onClick={onClick} className={`flex flex-col items-center justify-center w-16 h-12 gap-1 transition-all duration-300 relative ${isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
       {isActive && <div className="absolute inset-0 bg-white/10 rounded-2xl animate-in zoom-in duration-300"></div>}
       <div className={`relative z-10 transition-transform duration-300 ${isActive ? 'scale-110 text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]' : ''}`}>{icon}</div>
-      <span className={`relative z-10 text-[8px] uppercase tracking-widest ${isActive ? 'font-black text-cyan-100' : 'font-bold'}`}>{label}</span>
+      <span className={`relative z-10 text-[7px] sm:text-[8px] uppercase tracking-widest ${isActive ? 'font-black text-cyan-100' : 'font-bold'}`}>{label}</span>
     </button>
   );
 }
