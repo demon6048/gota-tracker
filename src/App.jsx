@@ -5,7 +5,7 @@ import {
   Save, X, Loader2, Lock, AlertCircle, Trash2,
   Zap, ShieldAlert, Wifi, WifiOff, Loader,
   MessageCircle, Copy, Check, History, Clock, FileText,
-  RotateCcw
+  RotateCcw, Banknote, Smartphone, User, LayoutGrid
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -80,6 +80,58 @@ const formatTime = (dateString) => {
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return '';
   return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+};
+
+// ==========================================
+// MOTOR ANTI-SPAM DE WHATSAPP (22 VARIACIONES)
+// ==========================================
+const generarMensajeAntiSpam = ({ prestamista, fechaStr, horaStr, montoAbono, saldoRestante, metodoPago }) => {
+  const esEfectivo = metodoPago === 'EFECTIVO';
+  const viaTexto = esEfectivo ? 'en efectivo (mano a mano)' : 'por billetera digital (Yape)';
+  const monto = Number(montoAbono || 0).toFixed(2);
+  const saldo = Number(saldoRestante || 0).toFixed(2);
+
+  const plantillas = [
+    () => `\uD83E\uDD1D Hola ${prestamista}, adjunto mi comprobante del pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${monto}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}\n\n\u2728 \u00A1Saludos!`,
+    () => `\uD83D\uDC4B Qu\u00E9 tal ${prestamista}, paso a dejarte la constancia del abono de hoy realizado ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F D\u00EDa: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2705 Monto pagado: S/ ${monto}\n\uD83D\uDCCA Resta por pagar: S/ ${saldo}\n\n\uD83D\uDE4C \u00A1Que tengas excelente d\u00EDa!`,
+    () => `\u2728 Buen d\u00EDa ${prestamista}, ya qued\u00F3 listo el pago correspondiente a hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora exacta: ${horaStr}\n\uD83D\uDCB5 Cuota abonada: S/ ${monto}\n\uD83D\uDCC9 Saldo pendiente: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Muchas gracias!`,
+    () => `\uD83D\uDCF2 Saludos ${prestamista}, te comparto el detalle de la cuota pagada el d\u00EDa de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Importe: S/ ${monto}\n\uD83D\uDCB0 Nuevo saldo: S/ ${saldo}\n\n\uD83D\uDC4D \u00A1Seguimos al d\u00EDa!`,
+    () => `\u2705 Hola ${prestamista}, cumpliendo con el abono del d\u00EDa ${viaTexto}. Aqu\u00ED los datos:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB8 Abonado hoy: S/ ${monto}\n\uD83E\uDDFE Cuenta restante: S/ ${saldo}\n\n\uD83C\uDF1F \u00A1Buen d\u00EDa!`,
+    () => `\uD83D\uDCBC Estimado ${prestamista}, te env\u00EDo el respaldo de la operaci\u00F3n de hoy efectuada ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Pago: S/ ${monto}\n\uD83D\uDCB0 Saldo actual: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Saludos cordiales!`,
+    () => `\uD83D\uDE80 Hola ${prestamista}, acabo de realizar el pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2714\uFE0F Abono: S/ ${monto}\n\uD83D\uDCB0 Queda pendiente: S/ ${saldo}\n\n\u2728 \u00A1Gracias por confirmar!`,
+    () => `\uD83D\uDC4B Buenas ${prestamista}, te confirmo que ya se hizo el dep\u00F3sito de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB5 Monto enviado: S/ ${monto}\n\uD83D\uDCCA Saldo restante: S/ ${saldo}\n\n\uD83D\uDE4C \u00A1Saludos!`,
+    () => `\uD83E\uDDFE Qu\u00E9 tal ${prestamista}, aqu\u00ED tienes el reporte del abono que acabo de hacer ${viaTexto}.\n\n\uD83D\uDCC5 D\u00EDa: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Valor abonado: S/ ${monto}\n\uD83D\uDCB0 Por cancelar: S/ ${saldo}\n\n\uD83D\uDC4D \u00A1Buen d\u00EDa!`,
+    () => `\u26A1 Hola ${prestamista}, listo el pago de la fecha ${viaTexto}. Te dejo el resumen:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\u2705 Cuota: S/ ${monto}\n\uD83D\uDCB0 Saldo a la fecha: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Nos vemos!`,
+    () => `\uD83D\uDCF1 Hola ${prestamista}, te hago llegar los datos de la transferencia de hoy ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\uD83D\uDCB8 Monto: S/ ${monto}\n\uD83D\uDCC9 Resta: S/ ${saldo}\n\n\u2728 \u00A1Excelente jornada!`,
+    () => `\uD83D\uDCDD Qu\u00E9 tal ${prestamista}, registrando la cuota cumplida del d\u00EDa de hoy ${viaTexto}:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono del d\u00EDa: S/ ${monto}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}\n\n\uD83D\uDE4C \u00A1Muchas gracias!`,
+    () => `\uD83D\uDD14 Hola ${prestamista}, ya est\u00E1 procesado el abono de hoy ${viaTexto}. Detalles:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\u2705 Pago: S/ ${monto}\n\uD83E\uDDFE Saldo pendiente: S/ ${saldo}\n\n\uD83D\uDC4D \u00A1Saludos!`,
+    () => `\uD83C\uDF1F Saludos ${prestamista}, te env\u00EDo la constancia del pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 D\u00EDa: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\uD83D\uDCB5 Abonado: S/ ${monto}\n\uD83D\uDCB0 Restante: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Quedo atento!`,
+    () => `\uD83D\uDC4B Hola ${prestamista}, te actualizo con el abono realizado hace un momento ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Monto: S/ ${monto}\n\uD83D\uDCCA Saldo actual: S/ ${saldo}\n\n\u2728 \u00A1Buen d\u00EDa!`,
+    () => `\u2705 Buenas ${prestamista}, cumpliendo puntual con el pago de hoy ${viaTexto}:\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB8 Cuota pagada: S/ ${monto}\n\uD83D\uDCB0 Nuevo saldo: S/ ${saldo}\n\n\uD83D\uDE4C \u00A1Saludos!`,
+    () => `\uD83D\uDCB3 Hola ${prestamista}, te dejo la constancia de la cuota abonada hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2714\uFE0F Abono: S/ ${monto}\n\uD83D\uDCC9 Saldo por pagar: S/ ${saldo}\n\n\uD83D\uDC4D \u00A1Gracias!`,
+    () => `\uD83D\uDE80 Qu\u00E9 tal ${prestamista}, pago efectuado con \u00E9xito hoy ${viaTexto}. Aqu\u00ED el detalle:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB5 Importe: S/ ${monto}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}\n\n\u2728 \u00A1Saludos!`,
+    () => `\uD83D\uDCCA Hola ${prestamista}, te comparto la actualizaci\u00F3n de cuenta con el pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 D\u00EDa: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${monto}\n\uD83E\uDDFE Queda restando: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Buen d\u00EDa!`,
+    () => `\uD83D\uDC4B Saludos ${prestamista}, ya se hizo efectivo el abono del d\u00EDa ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2705 Monto: S/ ${monto}\n\uD83D\uDCB0 Saldo pendiente: S/ ${saldo}\n\n\uD83C\uDF1F \u00A1Muchas gracias!`,
+    () => `\uD83D\uDCF2 Hola ${prestamista}, adjunto la informaci\u00F3n del pago que acabo de realizar ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB8 Pago hoy: S/ ${monto}\n\uD83D\uDCB0 Resta: S/ ${saldo}\n\n\uD83D\uDC4D \u00A1Excelente d\u00EDa!`,
+    () => `\uD83E\uDDFE Qu\u00E9 tal ${prestamista}, te env\u00EDo el ticket digital del abono de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Cuota abonada: S/ ${monto}\n\uD83D\uDCCA Saldo restante: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Saludos!`
+  ];
+
+  const indiceAleatorio = Math.floor(Math.random() * plantillas.length);
+  return plantillas[indiceAleatorio]();
+};
+
+const generarEstadoCuentaAntiSpam = ({ prestamista, fechaStr, horaStr, saldoRestante, exigible }) => {
+  const saldo = Number(saldoRestante || 0).toFixed(2);
+  const mora = Number(exigible || 0).toFixed(2);
+
+  const plantillasEstado = [
+    () => `\uD83E\uDD1D Hola ${prestamista}, te comparto el resumen actualizado de nuestra cuenta al d\u00EDa de hoy.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}\n\u26A0\uFE0F Exigible hoy: S/ ${mora}\n\n\u2728 \u00A1Saludos!`,
+    () => `\uD83D\uDC4B Qu\u00E9 tal ${prestamista}, paso a enviarte el estado de cuenta actualizado:\n\n\uD83D\uDDD3\uFE0F D\u00EDa: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\uD83D\uDCCA Por pagar: S/ ${saldo}\n\uD83D\uDD14 Cuota pendiente: S/ ${mora}\n\n\uD83D\uDE4C \u00A1Buen d\u00EDa!`,
+    () => `\uD83D\uDCDD Saludos ${prestamista}, as\u00ED va el avance de la cuenta hasta este momento:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB0 Resta total: S/ ${saldo}\n\uD83D\uDCB3 Exigible actual: S/ ${mora}\n\n\uD83D\uDC4D \u00A1Seguimos en contacto!`
+  ];
+
+  const idx = Math.floor(Math.random() * plantillasEstado.length);
+  return plantillasEstado[idx]();
 };
 
 // --- Componente Principal ---
@@ -174,7 +226,6 @@ export default function App() {
     const historyRef = collection(db, coleccionHistorial);
     const unsubHistory = onSnapshot(historyRef, (snapshot) => {
       const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      // Ordenar por fecha reciente
       logs.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
       setHistoryLogs(logs);
     });
@@ -206,7 +257,7 @@ export default function App() {
   }, [loans]);
 
   // --- Función de Registro de Historial ---
-  const logActivity = async (tipo, prestamista, descripcion, monto = 0, loanId = null) => {
+  const logActivity = async (tipo, prestamista, descripcion, monto = 0, loanId = null, metodo = 'DIGITAL') => {
     try {
       await addDoc(collection(db, coleccionHistorial), {
         tipo,
@@ -214,6 +265,7 @@ export default function App() {
         descripcion,
         monto,
         loanId,
+        metodo,
         fecha: new Date().toISOString()
       });
     } catch (error) {
@@ -222,7 +274,7 @@ export default function App() {
   };
 
   // --- Handlers DB ---
-  const executePayment = async (loanId, amountPaid) => {
+  const executePayment = async (loanId, amountPaid, paymentMethod = 'DIGITAL') => {
     const loan = loans.find(l => l.id === loanId);
     if (!loan || !user) return;
 
@@ -242,30 +294,36 @@ export default function App() {
         pagadoAcumulado: nuevoPagado,
         lastManualPaymentDate: todayStr,
         manualPaymentsCount: count + 1,
-        ultimoPagoMonto: amountPaid 
+        ultimoPagoMonto: amountPaid,
+        ultimoPagoMetodo: paymentMethod
       });
 
-      // Guardar en el Historial adjuntando el ID del préstamo
-      await logActivity('PAGO', loan.prestamista, `Abono registrado a favor de ${loan.prestamista}`, amountPaid, loan.id);
+      await logActivity('PAGO', loan.prestamista, `Abono en ${paymentMethod.toLowerCase()} a favor de ${loan.prestamista}`, amountPaid, loan.id, paymentMethod);
     } catch (error) {
       console.error("Error al registrar pago:", error);
       setFirebaseStatus('error');
     }
   };
+
   const handleEdit = async (id, prestamista, telefono, yape, nuevoSaldo, nuevaCuota, nuevoExigible, nuevaFecha) => {
     if (!user) return;
     try {
+      const loan = loans.find(l => l.id === id);
+      const deudaTotal = loan?.deudaTotal || 0;
+      const saldoNum = parseFloat(nuevoSaldo) || 0;
+      const nuevoPagadoAcumulado = Math.max(0, deudaTotal - saldoNum);
+
       const loanDoc = doc(db, coleccionGlobal, id);
       await updateDoc(loanDoc, {
         prestamista: prestamista || '',
         telefono: telefono || '',
         yape: yape || '',
-        saldoPendiente: parseFloat(nuevoSaldo) || 0,
+        saldoPendiente: saldoNum,
+        pagadoAcumulado: nuevoPagadoAcumulado,
         cuotaDiaria: parseFloat(nuevaCuota) || 0,
         montoExigible: parseFloat(nuevoExigible) || 0,
         fechaInicio: new Date(nuevaFecha + 'T12:00:00').toISOString()
       });
-      const loan = loans.find(l => l.id === id);
       if(loan) await logActivity('EDICION', prestamista || loan.prestamista, `Parámetros modificados manualmente`, 0, id);
     } catch (error) {
       console.error("Error al editar:", error);
@@ -279,7 +337,6 @@ export default function App() {
       const loansRef = collection(db, coleccionGlobal);
       const docRef = await addDoc(loansRef, newLoan);
       
-      // Guardar en el Historial
       await logActivity('NUEVO', newLoan.prestamista, `Se inyectó un nuevo préstamo a ${newLoan.prestamista}`, newLoan.capital, docRef.id);
       
       setActiveTab('dashboard');
@@ -311,11 +368,9 @@ export default function App() {
     if (log.tipo !== 'PAGO') return; 
 
     try {
-      // 1. Encontrar el préstamo
       const loan = loans.find(l => l.id === log.loanId || l.prestamista === log.prestamista);
       
       if (loan) {
-        // 2. Devolver la deuda y restaurar candados
         const nuevoSaldo = loan.saldoPendiente + log.monto;
         const nuevoPagado = Math.max(0, (loan.pagadoAcumulado || 0) - log.monto);
         
@@ -327,9 +382,8 @@ export default function App() {
         });
       }
 
-      // 3. Borrar el historial antiguo y crear uno nuevo indicando la reversión
       await deleteDoc(doc(db, coleccionHistorial, log.id));
-      await logActivity('REVERSO', log.prestamista, `Reversión de pago erróneo.`, log.monto, log.loanId);
+      await logActivity('REVERSO', log.prestamista, `Reversión de pago erróneo (-S/ ${log.monto.toFixed(2)})`, log.monto, log.loanId);
       
     } catch (error) {
       console.error("Error al revertir pago:", error);
@@ -349,7 +403,6 @@ export default function App() {
   }
 
   return (
-    // FIX PWA: h-[100dvh] y overflow-hidden evitan que la página entera haga scroll, anclando la barra inferior.
     <div className="flex justify-center bg-[#030712] h-[100dvh] font-sans text-slate-200 overflow-hidden">
       <div className="w-full max-w-md bg-[#050505] h-full shadow-2xl flex flex-col relative ring-1 ring-white/5">
         
@@ -394,20 +447,20 @@ export default function App() {
           </div>
         </header>
 
-        {/* Content Area - Scrollbar hidden in CSS classes */}
+        {/* Content Area */}
         <main className="flex-1 overflow-y-auto p-4 pb-28 relative z-10 scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {activeTab === 'dashboard' && <DashboardTab loans={loans} onPayRequest={setPaymentModalData} onEdit={handleEdit} onDelete={handleDelete} />}
           {activeTab === 'add' && <AddLoanTab onAdd={handleAddLoan} />}
-          {activeTab === 'history' && <HistoryTab logs={historyLogs} onRevert={handleRevertLog} />}
+          {activeTab === 'history' && <HistoryTab logs={historyLogs} loans={loans} onRevert={handleRevertLog} />}
           {activeTab === 'insights' && <InsightsTab stats={stats} loans={loans} />}
         </main>
 
-        {/* FIX NAV: Bottom Nav más compacta y estática */}
+        {/* Bottom Nav compacta y estática */}
         <div className="absolute bottom-0 left-0 right-0 p-3 pointer-events-none z-30 flex justify-center bg-gradient-to-t from-black/80 to-transparent pt-8">
           <nav className="pointer-events-auto bg-slate-900/95 backdrop-blur-2xl border border-white/10 flex justify-around p-1.5 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-full max-w-[380px]">
             <NavItem icon={<Home size={18} />} label="Panel" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
             <NavItem icon={<PlusCircle size={18} />} label="Nuevo" isActive={activeTab === 'add'} onClick={() => setActiveTab('add')} />
-            <NavItem icon={<History size={18} />} label="Registro" isActive={activeTab === 'history'} onClick={() => setActiveTab('history')} />
+            <NavItem icon={<History size={18} />} label="Cobrador" isActive={activeTab === 'history'} onClick={() => setActiveTab('history')} />
             <NavItem icon={<PieChart size={18} />} label="Datos" isActive={activeTab === 'insights'} onClick={() => setActiveTab('insights')} />
           </nav>
         </div>
@@ -450,7 +503,6 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
   const [isEditing, setIsEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   
-  // Estados de edición
   const [editPrestamista, setEditPrestamista] = useState(loan.prestamista || '');
   const [editWhatsApp, setEditWhatsApp] = useState(loan.telefono || '');
   const [editYape, setEditYape] = useState(loan.yape || '');
@@ -460,7 +512,6 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
   const initialDateStr = loan.fechaInicio ? loan.fechaInicio.split('T')[0] : getLocalTodayString();
   const [editFechaInicio, setEditFechaInicio] = useState(initialDateStr);
 
-  // Blindaje matemático y línea de tiempo
   const cuotaSegura = loan.cuotaDiaria > 0 ? loan.cuotaDiaria : 1;
   const cuotasRestantes = Math.ceil((loan.saldoPendiente || 0) / cuotaSegura);
   const fechaFin = getEndDate(loan.fechaInicio, cuotasRestantes);
@@ -503,14 +554,27 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
     const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
 
-    let texto = '';
+    let mensajePlano = '';
     if (yaPagadoHoy && loan.ultimoPagoMonto) {
-      texto = `\uD83E\uDD1D Hola ${loan.prestamista}, adjunto mi comprobante del pago de hoy mediante billetera digital.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${loan.ultimoPagoMonto.toFixed(2)}\n\uD83D\uDCB0 Saldo restante: S/ ${loan.saldoPendiente.toFixed(2)}\n\n\u2728 \u00A1Saludos!`;
+      mensajePlano = generarMensajeAntiSpam({
+        prestamista: loan.prestamista,
+        fechaStr,
+        horaStr,
+        montoAbono: loan.ultimoPagoMonto,
+        saldoRestante: loan.saldoPendiente,
+        metodoPago: loan.ultimoPagoMetodo || 'DIGITAL'
+      });
     } else {
-      texto = `\uD83E\uDD1D Hola ${loan.prestamista}, te informo el estado de cuenta al día de hoy.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB0 Restante: S/ ${loan.saldoPendiente.toFixed(2)}\n\u26A0\uFE0F Exigible Actual: S/ ${exigible.toFixed(2)}\n\n\u2728 \u00A1Saludos!`;
+      mensajePlano = generarEstadoCuentaAntiSpam({
+        prestamista: loan.prestamista,
+        fechaStr,
+        horaStr,
+        saldoRestante: loan.saldoPendiente,
+        exigible
+      });
     }
     
-    const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(texto)}`;
+    const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(mensajePlano)}`;
     window.open(urlSegura, '_blank');
   };
 
@@ -635,7 +699,6 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
 
         {/* Acciones (Contacto y Pago) */}
         <div className="flex items-center justify-between mt-auto">
-          {/* Botones de Contacto Rápidos */}
           <div className="flex gap-2">
              {loan.yape && (
                <button 
@@ -650,7 +713,7 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
                <button 
                  onClick={handleWhatsApp}
                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(34,197,94,0.1)] ${yaPagadoHoy ? 'bg-green-500/20 border-green-500/50 text-green-300' : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'}`}
-                 title={yaPagadoHoy ? "Enviar Comprobante" : "Enviar Estado de Cuenta"}
+                 title={yaPagadoHoy ? "Enviar Comprobante (Anti-Spam)" : "Enviar Estado de Cuenta"}
                >
                  <MessageCircle size={18} />
                </button>
@@ -678,10 +741,11 @@ function PaymentModal({ loan, onClose, onSubmit }) {
   const [amount, setAmount] = useState((loan.montoExigible > 0 ? loan.montoExigible : loan.cuotaDiaria).toString());
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('DIGITAL'); 
   
-  // Estados para la pantalla de éxito
   const [isSuccess, setIsSuccess] = useState(false);
   const [paidAmount, setPaidAmount] = useState(0);
+  const [paidMethod, setPaidMethod] = useState('');
   
   const todayStr = getLocalTodayString();
   const requiresPassword = loan.lastManualPaymentDate === todayStr && (loan.manualPaymentsCount || 0) >= 1;
@@ -692,22 +756,30 @@ function PaymentModal({ loan, onClose, onSubmit }) {
     if (numAmount > loan.saldoPendiente) return setError("Excede deuda máxima");
     if (requiresPassword && password !== 'KGB2026') return setError("ACCESO DENEGADO. Clave incorrecta.");
     
-    await onSubmit(loan.id, numAmount);
+    await onSubmit(loan.id, numAmount, paymentMethod);
     setPaidAmount(numAmount);
+    setPaidMethod(paymentMethod);
     setIsSuccess(true);
   };
 
   const handleSendReceipt = () => {
     if (!loan.telefono) return;
-    const saldoActualizado = (loan.saldoPendiente - paidAmount).toFixed(2);
+    const saldoActualizado = Math.max(0, loan.saldoPendiente - paidAmount);
     
     const hoy = new Date();
     const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
 
-    const texto = `\uD83E\uDD1D Hola ${loan.prestamista}, adjunto mi comprobante del pago de hoy mediante billetera digital.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${paidAmount.toFixed(2)}\n\uD83D\uDCB0 Saldo restante: S/ ${saldoActualizado}\n\n\u2728 \u00A1Saludos!`;
+    const mensajePlano = generarMensajeAntiSpam({
+      prestamista: loan.prestamista,
+      fechaStr,
+      horaStr,
+      montoAbono: paidAmount,
+      saldoRestante: saldoActualizado,
+      metodoPago: paidMethod
+    });
     
-    const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(texto)}`;
+    const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(mensajePlano)}`;
     window.open(urlSegura, '_blank');
     
     onClose();
@@ -725,11 +797,12 @@ function PaymentModal({ loan, onClose, onSubmit }) {
             </div>
             
             <h3 className="text-2xl font-black text-white mb-2 tracking-tight uppercase">¡Pago Registrado!</h3>
-            <p className="text-slate-400 font-bold mb-8">Se abonaron <span className="text-emerald-400">S/ {paidAmount.toFixed(2)}</span> a la cuenta de {loan.prestamista}</p>
+            <p className="text-slate-400 font-bold mb-2">Se abonaron <span className="text-emerald-400">S/ {paidAmount.toFixed(2)}</span> a {loan.prestamista}</p>
+            <p className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mb-6">Modo Anti-Spam Activado (22 plantillas)</p>
             
             {loan.telefono ? (
               <button onClick={handleSendReceipt} className="w-full bg-[#25D366] text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 mb-4 hover:bg-[#1ebd5a] transition-colors shadow-[0_0_20px_rgba(37,211,102,0.3)]">
-                <MessageCircle size={22} /> Enviar Comprobante
+                <MessageCircle size={22} /> Enviar Comprobante Único
               </button>
             ) : (
               <p className="text-amber-500/80 text-[10px] font-bold uppercase tracking-widest mb-4">No hay número de WhatsApp registrado.</p>
@@ -755,6 +828,11 @@ function PaymentModal({ loan, onClose, onSubmit }) {
           <button onClick={onClose} className="bg-white/5 p-2 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-colors"><X size={20} /></button>
         </div>
         
+        <div className="flex gap-2 mb-6 relative z-10">
+          <button onClick={() => setPaymentMethod('DIGITAL')} className={`flex-1 py-3 rounded-2xl text-xs font-black flex items-center justify-center gap-2 border transition-all ${paymentMethod === 'DIGITAL' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.3)]' : 'bg-black/50 text-slate-500 border-white/5 hover:bg-black/80'}`}><Smartphone size={16}/> DIGITAL</button>
+          <button onClick={() => setPaymentMethod('EFECTIVO')} className={`flex-1 py-3 rounded-2xl text-xs font-black flex items-center justify-center gap-2 border transition-all ${paymentMethod === 'EFECTIVO' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 shadow-[0_0_15px_rgba(52,211,153,0.3)]' : 'bg-black/50 text-slate-500 border-white/5 hover:bg-black/80'}`}><Banknote size={16}/> EFECTIVO</button>
+        </div>
+
         <div className="space-y-6 mb-8 relative z-10">
           <div>
             <label className="block text-[10px] font-bold text-emerald-400/80 mb-2 uppercase tracking-widest drop-shadow-[0_0_5px_rgba(52,211,153,0.5)]">Monto a Transferir (S/)</label>
@@ -794,7 +872,6 @@ function AddLoanTab({ onAdd }) {
   const [porcentajeStr, setPorcentajeStr] = useState('20'); 
   const [cuotaStr, setCuotaStr] = useState('');
   
-  // ESTADOS MÁQUINA DEL TIEMPO
   const [fechaInicioStr, setFechaInicioStr] = useState(getLocalTodayString());
   const [pagadoPrevioStr, setPagadoPrevioStr] = useState('');
 
@@ -807,11 +884,9 @@ function AddLoanTab({ onAdd }) {
   const cuota = parseFloat(cuotaStr) || 0;
   const pagadoPrevio = parseFloat(pagadoPrevioStr) || 0;
 
-  // Cálculos de la Máquina del Tiempo
   const todayStr = getLocalTodayString();
   let diasTranscurridos = 0;
   
-  // Se cobra a partir del día SIGUIENTE de la entrega
   if (fechaInicioStr && fechaInicioStr < todayStr) {
     let checkDate = addDaysToDateStr(fechaInicioStr, 1);
     while (checkDate <= todayStr) {
@@ -842,7 +917,7 @@ function AddLoanTab({ onAdd }) {
       montoExigible: exigibleReal, 
       pagadoAcumulado: pagadoPrevio,
       fechaInicio: new Date(fechaInicioStr + 'T12:00:00').toISOString(),
-      lastProcessedDate: todayStr, // Se marca procesado hasta HOY
+      lastProcessedDate: todayStr,
       lastManualPaymentDate: null, 
       manualPaymentsCount: 0,
       ultimoPagoMonto: 0
@@ -866,7 +941,6 @@ function AddLoanTab({ onAdd }) {
       
       <form onSubmit={handleSubmit} className="bg-white/5 backdrop-blur-xl p-6 sm:p-8 rounded-[32px] border border-white/10 space-y-6 shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
         
-        {/* Datos Personales */}
         <div className="space-y-4">
           <div>
             <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Prestamista</label>
@@ -885,7 +959,6 @@ function AddLoanTab({ onAdd }) {
           </div>
         </div>
 
-        {/* Datos Financieros */}
         <div className="pt-4 border-t border-white/10 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -903,7 +976,6 @@ function AddLoanTab({ onAdd }) {
           </div>
         </div>
 
-        {/* Máquina del Tiempo (Migración de Deudas) */}
         <div className="pt-4 border-t border-white/10 space-y-4">
           <h3 className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2">
              <Calendar size={14}/> Sincronizar Préstamo Antiguo
@@ -935,7 +1007,6 @@ function AddLoanTab({ onAdd }) {
                 <span className="text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]">S/ {deudaTotal.toFixed(2)}</span>
               </div>
               
-              {/* Previsualización del cálculo de fechas */}
               {(diasTranscurridos > 0 || pagadoPrevio > 0) && (
                 <div className="mt-4 pt-4 border-t border-dashed border-cyan-500/30 space-y-2">
                    <div className="flex justify-between text-[10px] text-cyan-400 uppercase tracking-widest">
@@ -970,79 +1041,221 @@ function AddLoanTab({ onAdd }) {
   );
 }
 
-function HistoryTab({ logs, onRevert }) {
-  if (!logs || logs.length === 0) {
+// ==========================================
+// HISTORIAL POR COBRADOR + TABLERO 24 CUOTAS
+// ==========================================
+function HistoryTab({ logs, loans, onRevert }) {
+  // Construir lista de cobradores desde los préstamos activos + historial
+  const listaCobradores = useMemo(() => {
+    const nombresLoans = loans.map(l => l.prestamista).filter(Boolean);
+    const nombresLogs = (logs || []).map(l => l.prestamista).filter(Boolean);
+    return [...new Set([...nombresLoans, ...nombresLogs])];
+  }, [loans, logs]);
+
+  const [selectedCobrador, setSelectedCobrador] = useState('');
+
+  // Seleccionar automáticamente el primer cobrador disponible
+  useEffect(() => {
+    if (listaCobradores.length > 0 && (!selectedCobrador || !listaCobradores.includes(selectedCobrador))) {
+      setSelectedCobrador(listaCobradores[0]);
+    }
+  }, [listaCobradores, selectedCobrador]);
+
+  if (listaCobradores.length === 0) {
     return (
       <div className="text-center p-10 mt-10 relative z-10">
         <FileText className="mx-auto text-slate-700 mb-4" size={48} />
-        <p className="text-slate-400 font-bold tracking-wide">Bitácora vacía</p>
-        <p className="text-slate-600 text-xs mt-2">Los movimientos quedarán registrados aquí.</p>
+        <p className="text-slate-400 font-bold tracking-wide">Sin cobradores registrados</p>
+        <p className="text-slate-600 text-xs mt-2">Agrega un préstamo para ver el expediente de sus 24 cuotas.</p>
       </div>
     );
   }
 
+  // Datos del contrato del cobrador seleccionado
+  const loanActual = loans.find(l => l.prestamista === selectedCobrador);
+  const logsDelCobrador = (logs || []).filter(log => log.prestamista === selectedCobrador);
+  const pagosRegistrados = logsDelCobrador.filter(log => log.tipo === 'PAGO');
+
+  // Cálculo de las 24 cuotas (o el número de cuotas del contrato)
+  const cuotaDiaria = loanActual?.cuotaDiaria || 25;
+  const deudaTotal = loanActual?.deudaTotal || 600;
+  const totalCuotasContrato = Math.max(1, Math.round(deudaTotal / cuotaDiaria)) || 24;
+  
+  const sumaLogsPagos = pagosRegistrados.reduce((acc, p) => acc + (p.monto || 0), 0);
+  const totalPagadoReal = loanActual ? (loanActual.pagadoAcumulado || 0) : sumaLogsPagos;
+  const saldoPendienteReal = loanActual ? (loanActual.saldoPendiente || 0) : Math.max(0, deudaTotal - totalPagadoReal);
+
+  // Cuántas casillas de las 24 están cubiertas
+  const cuotasCompletas = Math.floor((totalPagadoReal + 0.001) / cuotaDiaria);
+  const residuoParcial = Math.max(0, totalPagadoReal - (cuotasCompletas * cuotaDiaria));
+
+  // Pagos ordenados del más antiguo al más reciente para numerarlos (Abono #1, #2...)
+  const pagosCronologicos = [...pagosRegistrados].reverse();
+  const montoPrevioSincronizado = Math.max(0, totalPagadoReal - sumaLogsPagos);
+
   return (
-    <div className="space-y-4 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8">
-      <div className="mb-6 mt-2 flex items-center gap-3">
-        <History className="text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.8)]" size={24} />
-        <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 tracking-tighter uppercase">Bitácora de Auditoría</h2>
+    <div className="space-y-5 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8">
+      <div className="mb-2 mt-2 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <User className="text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.8)]" size={24} />
+          <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 tracking-tighter uppercase">Expediente por Cobrador</h2>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        {logs.map(log => {
-          let style = "bg-slate-900/50 border-slate-700";
-          let icon = <Clock size={14} className="text-slate-500" />;
-          let accent = "text-slate-400";
-          
-          if (log.tipo === 'PAGO') {
-            style = "bg-emerald-950/20 border-emerald-500/20";
-            icon = <CheckCircle size={14} className="text-emerald-500" />;
-            accent = "text-emerald-400";
-          } else if (log.tipo === 'NUEVO') {
-            style = "bg-cyan-950/20 border-cyan-500/20";
-            icon = <PlusCircle size={14} className="text-cyan-500" />;
-            accent = "text-cyan-400";
-          } else if (log.tipo === 'ELIMINACION') {
-            style = "bg-rose-950/20 border-rose-500/20";
-            icon = <Trash2 size={14} className="text-rose-500" />;
-            accent = "text-rose-400";
-          } else if (log.tipo === 'EDICION') {
-            style = "bg-amber-950/20 border-amber-500/20";
-            icon = <Edit2 size={14} className="text-amber-500" />;
-            accent = "text-amber-400";
-          } else if (log.tipo === 'REVERSO') {
-            style = "bg-fuchsia-950/20 border-fuchsia-500/20";
-            icon = <RotateCcw size={14} className="text-fuchsia-500" />;
-            accent = "text-fuchsia-400";
-          }
-
+      {/* Selector de Cobradores */}
+      <div className="flex gap-2.5 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden">
+        {listaCobradores.map(cobrador => {
+          const isSelected = selectedCobrador === cobrador;
           return (
-            <div key={log.id} className={`p-4 rounded-2xl border backdrop-blur-md flex flex-col gap-2 shadow-sm ${style}`}>
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-2">
-                  {icon}
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${accent}`}>{log.tipo}</span>
-                </div>
-                <div className="text-right flex items-center gap-3">
-                   <div>
-                     <p className="text-[10px] text-slate-500 font-bold uppercase">{formatDate(log.fecha)}</p>
-                     <p className="text-[9px] text-slate-600">{formatTime(log.fecha)}</p>
-                   </div>
-                   {/* Botón Mágico de Reversa (Sólo para pagos) */}
-                   {log.tipo === 'PAGO' && (
-                     <button onClick={() => onRevert(log)} className="bg-rose-500/10 text-rose-500 p-1.5 rounded-lg border border-rose-500/30 hover:bg-rose-500/30 transition-all" title="Anular este pago">
-                       <Trash2 size={14} />
-                     </button>
-                   )}
-                </div>
-              </div>
-              <p className="text-sm font-bold text-white tracking-wide">{log.descripcion}</p>
-              {log.monto > 0 && (
-                 <p className={`text-lg font-black tracking-tight ${accent}`}>S/ {log.monto.toFixed(2)}</p>
-              )}
-            </div>
+            <button
+              key={cobrador}
+              onClick={() => setSelectedCobrador(cobrador)}
+              className={`px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all flex items-center gap-2 ${
+                isSelected
+                  ? 'bg-gradient-to-r from-emerald-500 to-cyan-400 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
+                  : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'
+              }`}
+            >
+              <User size={14} />
+              <span>{cobrador}</span>
+            </button>
           );
         })}
+      </div>
+
+      {/* Tarjeta Resumen del Cobrador */}
+      <div className="bg-slate-900/80 border border-white/10 rounded-[28px] p-5 backdrop-blur-xl shadow-lg">
+        <div className="flex justify-between items-center mb-4 pb-3 border-b border-white/10">
+          <div>
+            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 block">Estado del Cobrador</span>
+            <h3 className="text-xl font-black text-white tracking-tight">{selectedCobrador}</h3>
+          </div>
+          <div className="text-right">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block">Avance de Cuotas</span>
+            <span className="text-lg font-black text-cyan-400">{Math.min(totalCuotasContrato, cuotasCompletas)} / {totalCuotasContrato} DÍAS</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="bg-black/50 p-3 rounded-2xl border border-white/5">
+            <p className="text-[9px] text-slate-500 font-bold uppercase">Deuda Total</p>
+            <p className="text-sm font-black text-white mt-0.5">S/ {deudaTotal.toFixed(0)}</p>
+          </div>
+          <div className="bg-emerald-950/30 p-3 rounded-2xl border border-emerald-500/20">
+            <p className="text-[9px] text-emerald-400/80 font-bold uppercase">Ya Pagado</p>
+            <p className="text-sm font-black text-emerald-400 mt-0.5">S/ {totalPagadoReal.toFixed(2)}</p>
+          </div>
+          <div className="bg-rose-950/30 p-3 rounded-2xl border border-rose-500/20">
+            <p className="text-[9px] text-rose-400/80 font-bold uppercase">Falta Pagar</p>
+            <p className="text-sm font-black text-rose-400 mt-0.5">S/ {saldoPendienteReal.toFixed(2)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tablero Visual de las 24 Cuotas */}
+      <div className="bg-[#0a0a0a]/90 border border-white/10 rounded-[28px] p-5 backdrop-blur-xl">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <LayoutGrid size={16} className="text-cyan-400" />
+            <h4 className="text-xs font-black uppercase tracking-widest text-white">Cartilla de {totalCuotasContrato} Cuotas (S/ {cuotaDiaria} c/u)</h4>
+          </div>
+          <span className="text-[10px] font-bold text-emerald-400">{Math.max(0, totalCuotasContrato - cuotasCompletas)} pendientes</span>
+        </div>
+
+        <div className="grid grid-cols-6 gap-2">
+          {Array.from({ length: totalCuotasContrato }).map((_, idx) => {
+            const numeroCuota = idx + 1;
+            const isPaid = numeroCuota <= cuotasCompletas;
+            const isPartial = numeroCuota === cuotasCompletas + 1 && residuoParcial > 0.01;
+
+            return (
+              <div
+                key={numeroCuota}
+                className={`relative rounded-xl p-2 flex flex-col items-center justify-center border transition-all ${
+                  isPaid
+                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                    : isPartial
+                    ? 'bg-amber-500/20 border-amber-400/50 text-amber-300 animate-pulse'
+                    : 'bg-black/50 border-white/5 text-slate-600'
+                }`}
+              >
+                <span className="text-[9px] font-black uppercase">Día {numeroCuota}</span>
+                {isPaid ? (
+                  <CheckCircle size={14} className="text-emerald-400 my-1" />
+                ) : isPartial ? (
+                  <Clock size={14} className="text-amber-400 my-1" />
+                ) : (
+                  <span className="text-[10px] font-bold my-1 opacity-40">--</span>
+                )}
+                <span className="text-[8px] font-black">
+                  {isPaid ? `S/${cuotaDiaria}` : isPartial ? `S/${residuoParcial.toFixed(0)}` : `S/${cuotaDiaria}`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Lista Detallada de Pagos Hechos a este Cobrador */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">
+            Pagos Realizados a {selectedCobrador} ({pagosRegistrados.length})
+          </h4>
+        </div>
+
+        {montoPrevioSincronizado > 0.01 && (
+          <div className="p-4 rounded-2xl border border-cyan-500/30 bg-cyan-950/20 flex justify-between items-center">
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-cyan-400 block">Sincronización Inicial (Máquina del Tiempo)</span>
+              <p className="text-xs font-bold text-slate-300 mt-0.5">Pagos anteriores registrados al crear el contrato</p>
+            </div>
+            <span className="text-base font-black text-cyan-400">S/ {montoPrevioSincronizado.toFixed(2)}</span>
+          </div>
+        )}
+
+        {pagosCronologicos.length === 0 && montoPrevioSincronizado <= 0.01 ? (
+          <div className="text-center p-6 bg-white/5 rounded-2xl border border-white/5">
+            <p className="text-slate-500 text-xs font-bold">Aún no hay abonos individuales registrados para {selectedCobrador}.</p>
+          </div>
+        ) : (
+          [...pagosCronologicos].reverse().map((log, revIdx) => {
+            const numeroAbono = pagosCronologicos.length - revIdx;
+            const esEfectivo = log.metodo === 'EFECTIVO' || (log.descripcion && log.descripcion.toLowerCase().includes('efectivo'));
+
+            return (
+              <div key={log.id} className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/20 backdrop-blur-md flex justify-between items-center shadow-sm">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-emerald-500 text-black text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
+                      Abono #{numeroAbono}
+                    </span>
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border uppercase flex items-center gap-1 ${
+                      esEfectivo ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30'
+                    }`}>
+                      {esEfectivo ? <Banknote size={10} /> : <Smartphone size={10} />}
+                      {esEfectivo ? 'Efectivo' : 'Yape / Digital'}
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-300">
+                    {formatDate(log.fecha)} a las {formatTime(log.fecha)}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-black text-emerald-400">S/ {(log.monto || 0).toFixed(2)}</span>
+                  <button
+                    onClick={() => onRevert(log)}
+                    className="bg-rose-500/10 text-rose-400 p-2 rounded-xl border border-rose-500/30 hover:bg-rose-500/30 transition-all"
+                    title="Anular y revertir este pago"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
