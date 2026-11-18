@@ -1,13 +1,13 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Home, PlusCircle, PieChart, Wallet, Calendar, 
   CheckCircle, TrendingUp, Edit2, 
-  Save, X, Loader2, Lock, AlertCircle, Trash2,
-  Zap, ShieldAlert, Wifi, WifiOff, Loader,
+  Save, X, Loader2, Lock, Trash2,
+  Zap, Wifi, WifiOff, Loader,
   MessageCircle, Copy, Check, History, Clock, FileText,
-  Banknote, Smartphone, User, LayoutGrid, Image as ImageIcon,
-  Download, Share2, Upload, Calculator, ArrowRight, Hash,
-  Camera, RotateCcw, Clipboard, BellRing, CalendarClock,
+  Banknote, Smartphone, User, LayoutGrid,
+  Calculator, ArrowRight, Hash,
+  RotateCcw, BellRing, CalendarClock,
   Layers, RefreshCw, Search, Sparkles, Flame, Ban
 } from 'lucide-react';
 
@@ -120,41 +120,43 @@ const formatTime = (dateString) => {
 };
 
 // ==========================================
-// MOTOR ANTI-SPAM DE WHATSAPP (22 VARIACIONES + Nº OPERACIÓN)
+// MOTOR ANTI-SPAM DE VOUCHERS WHATSAPP (22 VARIACIONES POR DÍA: YAPE, PLIN, EFECTIVO)
 // ==========================================
-const generarMensajeAntiSpam = ({ prestamista, fechaStr, horaStr, montoAbono, saldoRestante, metodoPago, nroOperacion, cuotasCubiertas, totalCuotas, modalidad }) => {
-  const esEfectivo = metodoPago === 'EFECTIVO';
-  const viaTexto = esEfectivo ? 'en efectivo (mano a mano)' : 'por billetera digital (Yape)';
+const obtenerTextoViaPago = (metodoPago) => {
+  if (metodoPago === 'EFECTIVO') return 'en efectivo (mano a mano)';
+  if (metodoPago === 'PLIN') return 'por Plin';
+  return 'por Yape';
+};
+
+const generarMensajeAntiSpam = ({ prestamista, fechaStr, horaStr, montoAbono, saldoRestante, metodoPago, nroOperacion }) => {
+  const viaTexto = obtenerTextoViaPago(metodoPago);
   const monto = Number(montoAbono || 0).toFixed(2);
   const saldo = Number(saldoRestante || 0).toFixed(2);
   const lineaOp = nroOperacion ? `\n\uD83D\uDD22 N\u00BA Operaci\u00F3n: ${nroOperacion}` : '';
-  const lineaProgreso = modalidad === 'FIJO'
-    ? `\n\uD83D\uDCCC Modalidad: Pago Fijo`
-    : (cuotasCubiertas !== undefined && totalCuotas) ? `\n\uD83D\uDCCA Progreso: ${cuotasCubiertas}/${totalCuotas} cuotas` : '';
 
   const plantillas = [
-    () => `\uD83E\uDD1D Hola ${prestamista}, adjunto mi comprobante del pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}${lineaProgreso}\n\n\u2728 \u00A1Saludos!`,
-    () => `\uD83D\uDC4B Qu\u00E9 tal ${prestamista}, paso a dejarte la constancia del abono de hoy realizado ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F D\u00EDa: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2705 Monto pagado: S/ ${monto}${lineaOp}\n\uD83D\uDCCA Resta por pagar: S/ ${saldo}${lineaProgreso}\n\n\uD83D\uDE4C \u00A1Que tengas excelente d\u00EDa!`,
-    () => `\u2728 Buen d\u00EDa ${prestamista}, ya qued\u00F3 listo el pago correspondiente a hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora exacta: ${horaStr}\n\uD83D\uDCB5 Cuota abonada: S/ ${monto}${lineaOp}\n\uD83D\uDCC9 Saldo pendiente: S/ ${saldo}${lineaProgreso}\n\n\uD83E\uDD1D \u00A1Muchas gracias!`,
-    () => `\uD83D\uDCF2 Saludos ${prestamista}, te comparto el detalle de la cuota pagada el d\u00EDa de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Importe: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Nuevo saldo: S/ ${saldo}${lineaProgreso}\n\n\uD83D\uDC4D \u00A1Seguimos al d\u00EDa!`,
-    () => `\u2705 Hola ${prestamista}, cumpliendo con el abono del d\u00EDa ${viaTexto}. Aqu\u00ED los datos:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB8 Abonado hoy: S/ ${monto}${lineaOp}\n\uD83E\uDDFE Cuenta restante: S/ ${saldo}${lineaProgreso}\n\n\uD83C\uDF1F \u00A1Buen d\u00EDa!`,
-    () => `\uD83D\uDCBC Estimado ${prestamista}, te env\u00EDo el respaldo de la operaci\u00F3n de hoy efectuada ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Pago: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo actual: S/ ${saldo}${lineaProgreso}\n\n\uD83E\uDD1D \u00A1Saludos cordiales!`,
-    () => `\uD83D\uDE80 Hola ${prestamista}, acabo de realizar el pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2714\uFE0F Abono: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Queda pendiente: S/ ${saldo}${lineaProgreso}\n\n\u2728 \u00A1Gracias por confirmar!`,
-    () => `\uD83D\uDC4B Buenas ${prestamista}, te confirmo que ya se hizo el dep\u00F3sito de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB5 Monto enviado: S/ ${monto}${lineaOp}\n\uD83D\uDCCA Saldo restante: S/ ${saldo}${lineaProgreso}\n\n\uD83D\uDE4C \u00A1Saludos!`,
-    () => `\uD83E\uDDFE Qu\u00E9 tal ${prestamista}, aqu\u00ED tienes el reporte del abono que acabo de hacer ${viaTexto}.\n\n\uD83D\uDCC5 D\u00EDa: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Valor abonado: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Por cancelar: S/ ${saldo}${lineaProgreso}\n\n\uD83D\uDC4D \u00A1Buen d\u00EDa!`,
-    () => `\u26A1 Hola ${prestamista}, listo el pago de la fecha ${viaTexto}. Te dejo el resumen:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\u2705 Cuota: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo a la fecha: S/ ${saldo}${lineaProgreso}\n\n\uD83E\uDD1D \u00A1Nos vemos!`,
-    () => `\uD83D\uDCF1 Hola ${prestamista}, te hago llegar los datos de la transferencia de hoy ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\uD83D\uDCB8 Monto: S/ ${monto}${lineaOp}\n\uD83D\uDCC9 Resta: S/ ${saldo}${lineaProgreso}\n\n\u2728 \u00A1Excelente jornada!`,
-    () => `\uD83D\uDCDD Qu\u00E9 tal ${prestamista}, registrando la cuota cumplida del d\u00EDa de hoy ${viaTexto}:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono del d\u00EDa: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}${lineaProgreso}\n\n\uD83D\uDE4C \u00A1Muchas gracias!`,
-    () => `\uD83D\uDD14 Hola ${prestamista}, ya est\u00E1 procesado el abono de hoy ${viaTexto}. Detalles:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\u2705 Pago: S/ ${monto}${lineaOp}\n\uD83E\uDDFE Saldo pendiente: S/ ${saldo}${lineaProgreso}\n\n\uD83D\uDC4D \u00A1Saludos!`,
-    () => `\uD83C\uDF1F Saludos ${prestamista}, te env\u00EDo la constancia del pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 D\u00EDa: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\uD83D\uDCB5 Abonado: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Restante: S/ ${saldo}${lineaProgreso}\n\n\uD83E\uDD1D \u00A1Quedo atento!`,
-    () => `\uD83D\uDC4B Hola ${prestamista}, te actualizo con el abono realizado hace un momento ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Monto: S/ ${monto}${lineaOp}\n\uD83D\uDCCA Saldo actual: S/ ${saldo}${lineaProgreso}\n\n\u2728 \u00A1Buen d\u00EDa!`,
-    () => `\u2705 Buenas ${prestamista}, cumpliendo puntual con el pago de hoy ${viaTexto}:\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB8 Cuota pagada: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Nuevo saldo: S/ ${saldo}${lineaProgreso}\n\n\uD83D\uDE4C \u00A1Saludos!`,
-    () => `\uD83D\uDCB3 Hola ${prestamista}, te dejo la constancia de la cuota abonada hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2714\uFE0F Abono: S/ ${monto}${lineaOp}\n\uD83D\uDCC9 Saldo por pagar: S/ ${saldo}${lineaProgreso}\n\n\uD83D\uDC4D \u00A1Gracias!`,
-    () => `\uD83D\uDE80 Qu\u00E9 tal ${prestamista}, pago efectuado con \u00E9xito hoy ${viaTexto}. Aqu\u00ED el detalle:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB5 Importe: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}${lineaProgreso}\n\n\u2728 \u00A1Saludos!`,
-    () => `\uD83D\uDCCA Hola ${prestamista}, te comparto la actualizaci\u00F3n de cuenta con el pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 D\u00EDa: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${monto}${lineaOp}\n\uD83E\uDDFE Queda restando: S/ ${saldo}${lineaProgreso}\n\n\uD83E\uDD1D \u00A1Buen d\u00EDa!`,
-    () => `\uD83D\uDC4B Saludos ${prestamista}, ya se hizo efectivo el abono del d\u00EDa ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2705 Monto: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo pendiente: S/ ${saldo}${lineaProgreso}\n\n\uD83C\uDF1F \u00A1Muchas gracias!`,
-    () => `\uD83D\uDCF2 Hola ${prestamista}, adjunto la informaci\u00F3n del pago que acabo de realizar ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB8 Pago hoy: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Resta: S/ ${saldo}${lineaProgreso}\n\n\uD83D\uDC4D \u00A1Excelente d\u00EDa!`,
-    () => `\uD83E\uDDFE Qu\u00E9 tal ${prestamista}, te env\u00EDo el ticket digital del abono de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Cuota abonada: S/ ${monto}${lineaOp}\n\uD83D\uDCCA Saldo restante: S/ ${saldo}${lineaProgreso}\n\n\uD83E\uDD1D \u00A1Saludos!`
+    () => `\uD83E\uDD1D Hola ${prestamista}, te env\u00EDo el voucher y captura del pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}\n\n\u2728 \u00A1Saludos!`,
+    () => `\uD83D\uDC4B Qu\u00E9 tal ${prestamista}, paso a dejarte el comprobante del abono de hoy realizado ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F D\u00EDa: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2705 Monto pagado: S/ ${monto}${lineaOp}\n\uD83D\uDCCA Resta por pagar: S/ ${saldo}\n\n\uD83D\uDE4C \u00A1Que tengas excelente d\u00EDa!`,
+    () => `\u2728 Buen d\u00EDa ${prestamista}, ya qued\u00F3 listo el pago de hoy ${viaTexto}. Aqu\u00ED te adjunto el pantallazo:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB5 Cuota abonada: S/ ${monto}${lineaOp}\n\uD83D\uDCC9 Saldo pendiente: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Muchas gracias!`,
+    () => `\uD83D\uDCF2 Saludos ${prestamista}, te comparto el voucher de la cuota pagada hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Importe: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Nuevo saldo: S/ ${saldo}\n\n\uD83D\uDC4D \u00A1Seguimos al d\u00EDa!`,
+    () => `\u2705 Hola ${prestamista}, cumpliendo con el abono del d\u00EDa ${viaTexto}. Te paso la captura:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB8 Abonado hoy: S/ ${monto}${lineaOp}\n\uD83E\uDDFE Cuenta restante: S/ ${saldo}\n\n\uD83C\uDF1F \u00A1Buen d\u00EDa!`,
+    () => `\uD83D\uDCBC Estimado ${prestamista}, te env\u00EDo el respaldo del pago de hoy efectuado ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Pago: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo actual: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Saludos cordiales!`,
+    () => `\uD83D\uDE80 Hola ${prestamista}, acabo de realizar el pago de hoy ${viaTexto}. Te adjunto el voucher:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2714\uFE0F Abono: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Queda pendiente: S/ ${saldo}\n\n\u2728 \u00A1Gracias por confirmar!`,
+    () => `\uD83D\uDC4B Buenas ${prestamista}, te confirmo que ya se hizo el abono de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB5 Monto enviado: S/ ${monto}${lineaOp}\n\uD83D\uDCCA Saldo restante: S/ ${saldo}\n\n\uD83D\uDE4C \u00A1Saludos!`,
+    () => `\uD83E\uDDFE Qu\u00E9 tal ${prestamista}, aqu\u00ED tienes el detalle y captura del abono que acabo de hacer ${viaTexto}.\n\n\uD83D\uDCC5 D\u00EDa: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Valor abonado: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Por cancelar: S/ ${saldo}\n\n\uD83D\uDC4D \u00A1Buen d\u00EDa!`,
+    () => `\u26A1 Hola ${prestamista}, listo el pago de la fecha ${viaTexto}. Te dejo el voucher:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\u2705 Cuota: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo a la fecha: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Nos vemos!`,
+    () => `\uD83D\uDCF1 Hola ${prestamista}, te hago llegar el comprobante de la transferencia de hoy ${viaTexto}.\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\uD83D\uDCB8 Monto: S/ ${monto}${lineaOp}\n\uD83D\uDCC9 Resta: S/ ${saldo}\n\n\u2728 \u00A1Excelente jornada!`,
+    () => `\uD83D\uDCDD Qu\u00E9 tal ${prestamista}, registrando la cuota cumplida del d\u00EDa de hoy ${viaTexto}:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono del d\u00EDa: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}\n\n\uD83D\uDE4C \u00A1Muchas gracias!`,
+    () => `\uD83D\uDD14 Hola ${prestamista}, ya est\u00E1 enviado el abono de hoy ${viaTexto}. Te paso el pantallazo:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\u2705 Pago: S/ ${monto}${lineaOp}\n\uD83E\uDDFE Saldo pendiente: S/ ${saldo}\n\n\uD83D\uDC4D \u00A1Saludos!`,
+    () => `\uD83C\uDF1F Saludos ${prestamista}, te env\u00EDo la captura del pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 D\u00EDa: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\uD83D\uDCB5 Abonado: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Restante: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Quedo atento!`,
+    () => `\uD83D\uDC4B Hola ${prestamista}, te actualizo con el voucher del pago realizado hace un momento ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Monto: S/ ${monto}${lineaOp}\n\uD83D\uDCCA Saldo actual: S/ ${saldo}\n\n\u2728 \u00A1Buen d\u00EDa!`,
+    () => `\u2705 Buenas ${prestamista}, cumpliendo puntual con el pago de hoy ${viaTexto}:\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB8 Cuota pagada: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Nuevo saldo: S/ ${saldo}\n\n\uD83D\uDE4C \u00A1Saludos!`,
+    () => `\uD83D\uDCB3 Hola ${prestamista}, te dejo el comprobante de la cuota abonada hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2714\uFE0F Abono: S/ ${monto}${lineaOp}\n\uD83D\uDCC9 Saldo por pagar: S/ ${saldo}\n\n\uD83D\uDC4D \u00A1Gracias!`,
+    () => `\uD83D\uDE80 Qu\u00E9 tal ${prestamista}, pago efectuado con \u00E9xito hoy ${viaTexto}. Aqu\u00ED el voucher:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB5 Importe: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}\n\n\u2728 \u00A1Saludos!`,
+    () => `\uD83D\uDCCA Hola ${prestamista}, te comparto la captura del pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 D\u00EDa: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${monto}${lineaOp}\n\uD83E\uDDFE Queda restando: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Buen d\u00EDa!`,
+    () => `\uD83D\uDC4B Saludos ${prestamista}, ya se hizo efectivo el abono del d\u00EDa ${viaTexto}. Adjunto captura:\n\n\uD83D\uDDD3\uFE0F Fecha: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\u2705 Monto: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo pendiente: S/ ${saldo}\n\n\uD83C\uDF1F \u00A1Muchas gracias!`,
+    () => `\uD83D\uDCF2 Hola ${prestamista}, adjunto el pantallazo del pago que acabo de realizar ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB8 Pago hoy: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Resta: S/ ${saldo}\n\n\uD83D\uDC4D \u00A1Excelente d\u00EDa!`,
+    () => `\uD83E\uDDFE Qu\u00E9 tal ${prestamista}, te env\u00EDo el voucher del abono de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Cuota abonada: S/ ${monto}${lineaOp}\n\uD83D\uDCCA Saldo restante: S/ ${saldo}\n\n\uD83E\uDD1D \u00A1Saludos!`
   ];
 
   const indiceAleatorio = Math.floor(Math.random() * plantillas.length);
@@ -174,246 +176,6 @@ const generarEstadoCuentaAntiSpam = ({ prestamista, fechaStr, horaStr, saldoRest
 
   const idx = Math.floor(Math.random() * plantillasEstado.length);
   return plantillasEstado[idx]();
-};
-
-// ==========================================
-// GENERADOR DE TICKET EN IMAGEN (CANVAS 24 CASILLAS O PAGO FIJO + VOUCHER)
-// ==========================================
-const dibujarRectanguloRedondeado = (ctx, x, y, width, height, radius) => {
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
-};
-
-const renderTicketCanvas = async (canvas, {
-  prestamista,
-  fechaStr,
-  horaStr,
-  montoAbono,
-  deudaTotal,
-  totalPagado,
-  saldoRestante,
-  cuotaDiaria,
-  metodoPago,
-  nroOperacion,
-  voucherDataUrl,
-  modalidad = 'DIARIO',
-  fechaVencimiento = ''
-}) => {
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-
-  const esFijo = modalidad === 'FIJO';
-  const totalCuotas = esFijo ? 1 : (Math.max(1, Math.round((deudaTotal || 600) / (cuotaDiaria || 25))) || 24);
-  const cols = 6;
-  const rows = esFijo ? 2 : Math.ceil(totalCuotas / cols);
-
-  const extraVoucherHeight = voucherDataUrl ? 340 : 0;
-  const width = 720;
-  const height = 660 + (rows * 74) + extraVoucherHeight;
-
-  canvas.width = width;
-  canvas.height = height;
-
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-  bgGrad.addColorStop(0, '#040914');
-  bgGrad.addColorStop(0.5, '#070b12');
-  bgGrad.addColorStop(1, '#030508');
-  ctx.fillStyle = bgGrad;
-  ctx.fillRect(0, 0, width, height);
-
-  const radialGrad = ctx.createRadialGradient(width / 2, 70, 10, width / 2, 70, 320);
-  radialGrad.addColorStop(0, esFijo ? 'rgba(168, 85, 247, 0.22)' : 'rgba(16, 185, 129, 0.22)');
-  radialGrad.addColorStop(1, 'rgba(16, 185, 129, 0)');
-  ctx.fillStyle = radialGrad;
-  ctx.fillRect(0, 0, width, 350);
-
-  ctx.strokeStyle = esFijo ? 'rgba(192, 132, 252, 0.4)' : 'rgba(52, 211, 153, 0.35)';
-  ctx.lineWidth = 2;
-  dibujarRectanguloRedondeado(ctx, 24, 24, width - 48, height - 48, 28);
-  ctx.stroke();
-
-  ctx.fillStyle = esFijo ? '#c084fc' : '#10b981';
-  ctx.font = '900 15px sans-serif';
-  ctx.fillText(esFijo ? 'GOTATRACKER // COMPROBANTE DE PAGO ÚNICO / FECHA FIJA' : 'GOTATRACKER // COMPROBANTE & CONTROL DE CUOTAS', 56, 68);
-
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '900 36px sans-serif';
-  ctx.fillText(`COBRADOR: ${String(prestamista || '').toUpperCase()}`, 56, 112);
-
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = 'bold 16px sans-serif';
-  ctx.fillText(`FECHA: ${fechaStr}   •   HORA: ${horaStr}`, 56, 144);
-
-  const viaLabel = metodoPago === 'EFECTIVO' ? 'VÍA: EFECTIVO MANO A MANO' : 'VÍA: YAPE / BILLETERA DIGITAL';
-  const opLabel = nroOperacion ? `   •   OPERACIÓN #${nroOperacion}` : '';
-  ctx.fillStyle = 'rgba(6, 182, 212, 0.14)';
-  dibujarRectanguloRedondeado(ctx, 56, 162, width - 112, 44, 12);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(6, 182, 212, 0.4)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.fillStyle = '#22d3ee';
-  ctx.font = '900 15px sans-serif';
-  ctx.fillText(`${viaLabel}${opLabel}`, 74, 190);
-
-  ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
-  dibujarRectanguloRedondeado(ctx, 56, 224, width - 112, 110, 20);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(16, 185, 129, 0.45)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  ctx.fillStyle = '#6ee7b7';
-  ctx.font = 'bold 14px sans-serif';
-  ctx.fillText(montoAbono > 0 ? 'MONTO ABONADO EN ESTA TRANSACCIÓN' : 'ESTADO DE CUENTA ACTUALIZADO', 80, 255);
-
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '900 44px sans-serif';
-  ctx.fillText(montoAbono > 0 ? `S/ ${Number(montoAbono).toFixed(2)}` : (esFijo ? `TOTAL S/ ${Number(deudaTotal).toFixed(2)}` : `CUOTA S/ ${Number(cuotaDiaria).toFixed(2)}`), 80, 308);
-
-  const boxY = 354;
-  const boxW = (width - 112 - 24) / 3;
-  const metricas = [
-    { label: 'DEUDA CONTRATO', val: `S/ ${Number(deudaTotal || 0).toFixed(2)}`, bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.1)', color: '#ffffff' },
-    { label: 'ACUMULADO PAGADO', val: `S/ ${Number(totalPagado || 0).toFixed(2)}`, bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.35)', color: '#34d399' },
-    { label: 'SALDO RESTANTE', val: `S/ ${Number(saldoRestante || 0).toFixed(2)}`, bg: 'rgba(244,63,94,0.12)', border: 'rgba(244,63,94,0.35)', color: '#fb7185' }
-  ];
-
-  metricas.forEach((m, idx) => {
-    const x = 56 + idx * (boxW + 12);
-    ctx.fillStyle = m.bg;
-    dibujarRectanguloRedondeado(ctx, x, boxY, boxW, 86, 16);
-    ctx.fill();
-    ctx.strokeStyle = m.border;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 12px sans-serif';
-    ctx.fillText(m.label, x + 16, boxY + 28);
-
-    ctx.fillStyle = m.color;
-    ctx.font = '900 22px sans-serif';
-    ctx.fillText(m.val, x + 16, boxY + 64);
-  });
-
-  const gridStartY = 502;
-  const cellGap = 10;
-  const cellH = 62;
-
-  if (esFijo) {
-    const porc = Math.min(100, Math.round(((totalPagado || 0) / (deudaTotal || 1)) * 100));
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '900 16px sans-serif';
-    ctx.fillText(`MODALIDAD: PAGO ÚNICO / FECHA FIJA   —   AVANCE: ${porc}%`, 56, 480);
-
-    ctx.fillStyle = 'rgba(168, 85, 247, 0.14)';
-    dibujarRectanguloRedondeado(ctx, 56, gridStartY, width - 112, 115, 18);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(192, 132, 252, 0.45)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    ctx.fillStyle = '#d8b4fe';
-    ctx.font = 'bold 14px sans-serif';
-    ctx.fillText(`FECHA DE PAGO PACTADA: ${fechaVencimiento ? formatDate(fechaVencimiento).toUpperCase() : 'DEFINIDA EN CONTRATO'}`, 80, gridStartY + 38);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '900 22px sans-serif';
-    ctx.fillText(saldoRestante <= 0 ? '✓ CONTRATO DE PAGO ÚNICO LIQUIDADO AL 100%' : `PENDIENTE POR LIQUIDAR: S/ ${Number(saldoRestante).toFixed(2)}`, 80, gridStartY + 82);
-  } else {
-    const cuotasCompletas = Math.floor((Number(totalPagado || 0) + 0.001) / (cuotaDiaria || 25));
-    const residuoParcial = Math.max(0, Number(totalPagado || 0) - (cuotasCompletas * (cuotaDiaria || 25)));
-
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '900 16px sans-serif';
-    ctx.fillText(`CARTILLA DE ${totalCuotas} CUOTAS (S/ ${cuotaDiaria} C/U)   —   ${Math.min(totalCuotas, cuotasCompletas)}/${totalCuotas} COMPLETADAS`, 56, 480);
-
-    const cellW = (width - 112 - (cellGap * (cols - 1))) / cols;
-
-    for (let i = 0; i < totalCuotas; i++) {
-      const num = i + 1;
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = 56 + col * (cellW + cellGap);
-      const y = gridStartY + row * (cellH + cellGap);
-
-      const isPaid = num <= cuotasCompletas;
-      const isPartial = num === cuotasCompletas + 1 && residuoParcial > 0.01;
-
-      if (isPaid) {
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
-        ctx.strokeStyle = '#10b981';
-      } else if (isPartial) {
-        ctx.fillStyle = 'rgba(245, 158, 11, 0.22)';
-        ctx.strokeStyle = '#f59e0b';
-      } else {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-      }
-
-      dibujarRectanguloRedondeado(ctx, x, y, cellW, cellH, 12);
-      ctx.fill();
-      ctx.lineWidth = isPaid || isPartial ? 1.8 : 1;
-      ctx.stroke();
-
-      ctx.fillStyle = isPaid ? '#6ee7b7' : isPartial ? '#fcd34d' : '#64748b';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText(`DÍA ${num}`, x + 12, y + 20);
-
-      ctx.fillStyle = isPaid ? '#ffffff' : isPartial ? '#fef08a' : '#475569';
-      ctx.font = '900 14px sans-serif';
-      const textoCasilla = isPaid ? `✓ S/${cuotaDiaria}` : isPartial ? `S/${residuoParcial.toFixed(0)}` : `S/${cuotaDiaria}`;
-      ctx.fillText(textoCasilla, x + 12, y + 46);
-    }
-  }
-
-  let footerY = gridStartY + rows * (cellH + cellGap) + 25;
-
-  if (voucherDataUrl) {
-    await new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-        dibujarRectanguloRedondeado(ctx, 56, footerY, width - 112, 300, 18);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(6, 182, 212, 0.4)';
-        ctx.stroke();
-
-        ctx.fillStyle = '#22d3ee';
-        ctx.font = '900 13px sans-serif';
-        ctx.fillText('SCREENSHOT DE YAPE / VOUCHER VERIFICADO EN SISTEMA:', 76, footerY + 28);
-
-        const maxW = width - 152;
-        const maxH = 245;
-        const ratio = Math.min(maxW / img.width, maxH / img.height);
-        const drawW = img.width * ratio;
-        const drawH = img.height * ratio;
-        const drawX = 56 + ((width - 112) - drawW) / 2;
-        const drawY = footerY + 42;
-
-        ctx.drawImage(img, drawX, drawY, drawW, drawH);
-        footerY += 325;
-        resolve();
-      };
-      img.onerror = () => resolve();
-      img.src = voucherDataUrl;
-    });
-  }
-
-  ctx.fillStyle = '#475569';
-  ctx.font = 'bold 12px sans-serif';
-  ctx.fillText('VERIFICADO POR GOTATRACKER 2026 • SINCRONIZACIÓN EN TIEMPO REAL', 56, height - 42);
 };
 
 // --- Componente Principal ---
@@ -542,7 +304,6 @@ export default function App() {
       const cuota = loan.cuotaDiaria || 25;
       const diasRest = cuota > 0 ? Math.ceil(saldo / cuota) : 99;
 
-      // Disponibles para ruleteo: En S/ 0 o por terminar (<= 5 días) y que NO estén marcados como "Ya me prestó (Bloqueado)"
       if (!loan.yaMePrestoBloqueado && (saldo <= 0 || (loan.modalidad !== 'FIJO' && diasRest <= 5))) {
         disponiblesRuleteoCount++;
       }
@@ -573,7 +334,7 @@ export default function App() {
   }, [loans]);
 
   // --- Función de Registro de Historial ---
-  const logActivity = async (tipo, prestamista, descripcion, monto = 0, loanId = null, metodo = 'DIGITAL', nroOperacion = '', extraData = {}) => {
+  const logActivity = async (tipo, prestamista, descripcion, monto = 0, loanId = null, metodo = 'YAPE', nroOperacion = '', extraData = {}) => {
     try {
       await addDoc(collection(db, coleccionHistorial), {
         tipo,
@@ -623,7 +384,7 @@ export default function App() {
     }
   };
 
-  // --- MARCAR / DESMARCAR "YA ME PRESTÓ (EN NUEVO PRÉSTAMO)" PARA QUE NO SALGA EN EL DOMINÓ ---
+  // --- MARCAR / DESMARCAR "YA ME PRESTÓ (EN NUEVO PRÉSTAMO)" ---
   const handleToggleYaMePresto = async (loanId, newValue) => {
     if (!user || !loanId) return;
     try {
@@ -636,7 +397,7 @@ export default function App() {
   };
 
   // --- Handlers DB ---
-  const executePayment = async (loanId, amountPaid, paymentMethod = 'DIGITAL', nroOperacion = '') => {
+  const executePayment = async (loanId, amountPaid, paymentMethod = 'YAPE', nroOperacion = '') => {
     const loan = loans.find(l => l.id === loanId);
     if (!loan || !user) return;
 
@@ -648,7 +409,6 @@ export default function App() {
     const nuevoExigible = Math.max(0, (loan.montoExigible || 0) - amountPaid);
     const nuevoPagado = (loan.pagadoAcumulado || 0) + amountPaid;
 
-    // Si llega a 0, queda libre para volver a prestar en el ruleteo
     const desbloquearRuleteo = nuevoSaldo <= 0 ? false : loan.yaMePrestoBloqueado;
 
     try {
@@ -667,7 +427,7 @@ export default function App() {
       });
 
       const opInfo = nroOperacion ? ` (Op. #${nroOperacion})` : '';
-      await logActivity('PAGO', loan.prestamista, `Abono en ${paymentMethod.toLowerCase()} a favor de ${loan.prestamista}${opInfo}`, amountPaid, loan.id, paymentMethod, nroOperacion, {
+      await logActivity('PAGO', loan.prestamista, `Abono por ${paymentMethod} a favor de ${loan.prestamista}${opInfo}`, amountPaid, loan.id, paymentMethod, nroOperacion, {
         yapeAsociado: loan.yape || ''
       });
     } catch (error) {
@@ -682,7 +442,6 @@ export default function App() {
     try {
       const todayStr = getLocalTodayString();
 
-      // 1. Borrar todos los pagos del préstamo anterior de este cobrador para que comience limpio desde ahora
       await purgeOldLogsForLender(loan.prestamista, loan.id);
 
       const cap = parseFloat(nuevoCapitalNegociado) || loan.capital || 600;
@@ -710,7 +469,6 @@ export default function App() {
         manualPaymentsCount: 0,
         ultimoPagoMonto: 0,
         ciclosCompletados: (loan.ciclosCompletados || 0) + 1,
-        // Como ya nos acaba de prestar en este nuevo ciclo, queda bloqueado para que NO aparezca como disponible para prestar otra vez
         yaMePrestoBloqueado: true
       });
 
@@ -783,13 +541,11 @@ export default function App() {
   const handleAddLoan = async (newLoan) => {
     if (!user) return;
     try {
-      // Si había un préstamo viejo con el mismo nombre, limpiamos sus registros antiguos para que empiece de cero
       await purgeOldLogsForLender(newLoan.prestamista, null);
 
       const loansRef = collection(db, coleccionGlobal);
       const docRef = await addDoc(loansRef, {
         ...newLoan,
-        // Todo nuevo préstamo que agregas ahora significa que ESE cobrador YA TE PRESTÓ (está corriendo su nuevo ciclo)
         yaMePrestoBloqueado: true
       });
       
@@ -840,7 +596,7 @@ export default function App() {
         });
       }
 
-      const metodoOriginal = log.metodo || (log.descripcion && log.descripcion.toLowerCase().includes('efectivo') ? 'EFECTIVO' : 'DIGITAL');
+      const metodoOriginal = log.metodo || (log.descripcion && log.descripcion.toLowerCase().includes('efectivo') ? 'EFECTIVO' : 'YAPE');
       const yapeOriginal = log.yapeAsociado || loan?.yape || '';
 
       await deleteDoc(doc(db, coleccionHistorial, log.id));
@@ -1000,7 +756,7 @@ export default function App() {
 }
 
 // ==========================================
-// MÓDULO DE RULETEO & PLAN DE PRÉSTAMO URGENTE (EXCLUYE A LOS QUE "YA ME PRESTARON")
+// MÓDULO DE RULETEO & PLAN DE PRÉSTAMO URGENTE
 // ==========================================
 function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, onToggleYaMePresto }) {
   const [metaUrgenteStr, setMetaUrgenteStr] = useState('1500');
@@ -1050,9 +806,6 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
     setProcessingId(null);
   };
 
-  // Clasificación real del círculo de préstamos:
-  // 1) "Ya me prestaron / Nuevo préstamo en curso" -> NO pueden volver a prestarte ahorita (ej. Liliana, Daylan, Gael)
-  // 2) "Disponibles para el Ruleteo" -> Los que están en S/ 0 (Reserva) o les falta poquito para terminar (como Steven) y no están bloqueados
   const { disponiblesParaRuleteo, bloqueadosYaMePrestaron } = useMemo(() => {
     const disp = [];
     const bloq = [];
@@ -1075,7 +828,6 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
     return disponiblesParaRuleteo.filter(l => (l.saldoPendiente || 0) <= 0);
   }, [disponiblesParaRuleteo]);
 
-  // Cadena Dominó (SOLO usa a los que SÍ están disponibles para ruletear, excluyendo a Liliana/Daylan/Gael que ya prestaron)
   const planDomino = useMemo(() => {
     const candidatos = disponiblesParaRuleteo.map(loan => {
       const saldoParaCero = loan.saldoPendiente || 0;
@@ -1132,7 +884,6 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
 
   return (
     <div className="space-y-5 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8">
-      {/* Cabecera del Plan Urgente */}
       <div className="bg-gradient-to-br from-cyan-950/60 via-slate-900/90 to-emerald-950/50 border border-cyan-500/40 rounded-[28px] p-5 shadow-[0_0_30px_rgba(6,182,212,0.15)]">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-11 h-11 rounded-2xl bg-cyan-500 text-black flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.6)] shrink-0">
@@ -1148,7 +899,7 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
           </div>
         </div>
         <p className="text-xs text-slate-300 font-bold leading-relaxed mb-4">
-          Los cobradores que <span className="text-rose-400">ya te prestaron en un nuevo ciclo</span> (ej. Liliana, Daylan, Gael) quedan excluidos automáticamente. Aquí solo entran los que están <span className="text-emerald-400">por terminar (como Steven)</span> o en <span className="text-cyan-400">Reserva (S/ 0)</span>.
+          Los cobradores que <span className="text-rose-400">ya te prestaron en un nuevo ciclo</span> quedan excluidos automáticamente. Aquí solo entran los que están <span className="text-emerald-400">por terminar</span> o en <span className="text-cyan-400">Reserva (S/ 0)</span>.
         </p>
 
         <div className="bg-black/60 border border-white/10 rounded-2xl p-4 space-y-3">
@@ -1226,7 +977,7 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
         {prestamistasEnReserva.length === 0 ? (
           <div className="p-4 rounded-2xl bg-black/50 border border-white/5 text-center">
             <p className="text-xs font-bold text-slate-400">
-              Cuando termines de pagarle a un cobrador (ej. Steven), quedará aquí en S/ 0 dispuesto a prestarte nuevamente.
+              Cuando termines de pagarle a un cobrador, quedará aquí en S/ 0 dispuesto a prestarte nuevamente.
             </p>
           </div>
         ) : (
@@ -1327,7 +1078,7 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
         )}
       </div>
 
-      {/* SECCIÓN 2: CADENA DOMINÓ (SOLO COBRADORES HABILITADOS PARA RULETEAR) */}
+      {/* SECCIÓN 2: CADENA DOMINÓ */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h3 className="text-xs font-black uppercase tracking-widest text-cyan-400 flex items-center gap-1.5">
@@ -1345,7 +1096,7 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
               No hay cobradores habilitados para ruletear en este momento.
             </p>
             <p className="text-[11px] text-slate-500">
-              Si un cobrador de abajo (ej. Steven) ya está por terminar y quieres incluirlo en el ruleteo, toca <span className="text-cyan-400 font-bold">&quot;Habilitar para Ruleteo&quot;</span> en la lista inferior.
+              Si un cobrador de abajo ya está por terminar y quieres incluirlo en el ruleteo, toca <span className="text-cyan-400 font-bold">&quot;Habilitar Ruleteo&quot;</span> en la lista inferior.
             </p>
           </div>
         ) : (
@@ -1410,7 +1161,6 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
                   </div>
                 </div>
 
-                {/* Negociador de subida de cupo (de 600 a 800, 900, 1000) */}
                 <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-3 space-y-2">
                   <div className="flex justify-between items-center flex-wrap gap-1">
                     <span className="text-[9px] font-black text-slate-300 uppercase">
@@ -1461,7 +1211,6 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
                     type="button"
                     onClick={() => onToggleYaMePresto(loan.id, true)}
                     className="px-2.5 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[9px] font-black uppercase hover:bg-rose-500/20 flex items-center gap-1"
-                    title="Marcar que ya te prestó para sacarlo del ruleteo"
                   >
                     <Ban size={12} />
                     <span>Ya me prestó</span>
@@ -1494,7 +1243,7 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
         )}
       </div>
 
-      {/* SECCIÓN 3: BLOQUEADOS PORQUE "YA ME PRESTARON / ESTÁN EN NUEVO PRÉSTAMO" (Ej. Liliana, Daylan, Gael) */}
+      {/* SECCIÓN 3: BLOQUEADOS PORQUE "YA ME PRESTARON / ESTÁN EN NUEVO PRÉSTAMO" */}
       <div className="bg-slate-900/60 border border-rose-500/25 rounded-[26px] p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1505,13 +1254,10 @@ function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, on
           </div>
           <span className="text-[9px] font-bold text-slate-400">No entran al ruleteo hoy</span>
         </div>
-        <p className="text-[11px] text-slate-400 font-bold">
-          Estos prestamistas ya te dieron un nuevo préstamo actual y lo estás pagando. Cuando a uno le falten pocos días para terminar, puedes tocar <span className="text-cyan-400">&quot;Habilitar Ruleteo&quot;</span>.
-        </p>
 
         {bloqueadosYaMePrestaron.length === 0 ? (
           <p className="text-[11px] text-slate-500 italic text-center py-2">
-            Ningún cobrador está marcado como bloqueado. Usa el botón &quot;Ya me prestó&quot; en cualquiera que ya esté en un nuevo préstamo.
+            Ningún cobrador está marcado como bloqueado.
           </p>
         ) : (
           <div className="space-y-2">
@@ -1673,7 +1419,7 @@ function FixedLoansAlertRadar({ loans, onPayWithAmount }) {
 // ==========================================
 // MÓDULO CAJA DEL DÍA (CON AUTO-COPIADO DE YAPE AL INSTANTE)
 // ==========================================
-function DailyCashBox({ loans, stats, onPayWithAmount }) {
+function DailyCashBox({ loans, onPayWithAmount }) {
   const [isOpen, setIsOpen] = useState(false);
   const [presupuestoStr, setPresupuestoStr] = useState('');
   const [copiedId, setCopiedId] = useState(null);
@@ -1879,7 +1625,7 @@ function DailyCashBox({ loans, stats, onPayWithAmount }) {
 }
 
 // ==========================================
-// PANEL PRINCIPAL CON ORGANIZACIÓN INTELIGENTE Y MARCADOR DE NUEVO CICLO
+// PANEL PRINCIPAL
 // ==========================================
 function DashboardTab({ loans, stats, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMePresto, onGoToDomino }) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -1919,7 +1665,7 @@ function DashboardTab({ loans, stats, onPayRequest, onEdit, onDelete, onRenew, o
       }
       return (b.montoExigible || 0) - (a.montoExigible || 0);
     });
-  }, [loans, filterCategory, searchQuery, sortBy, activeLoans, nearFinishLoans, reserveLoans, fixedActiveLoans]);
+  }, [filterCategory, searchQuery, sortBy, activeLoans, nearFinishLoans, reserveLoans, fixedActiveLoans]);
 
   return (
     <div className="space-y-4 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1946,7 +1692,7 @@ function DashboardTab({ loans, stats, onPayRequest, onEdit, onDelete, onRenew, o
               )}
             </div>
             <p className="text-[10px] text-cyan-300/80 font-bold">
-              Excluye a los que ya te prestaron (Liliana/Daylan/Gael) • Usa solo disponibles
+              Excluye a los que ya te prestaron • Usa solo disponibles
             </p>
           </div>
         </div>
@@ -2165,9 +1911,6 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
     const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
 
-    const totalCuotas = Math.max(1, Math.round(deudaOriginal / cuotaSegura)) || 24;
-    const cuotasCubiertas = Math.floor((pagado + 0.001) / cuotaSegura);
-
     let mensajePlano = '';
     if (yaPagadoHoy && loan.ultimoPagoMonto) {
       mensajePlano = generarMensajeAntiSpam({
@@ -2176,11 +1919,8 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
         horaStr,
         montoAbono: loan.ultimoPagoMonto,
         saldoRestante: loan.saldoPendiente,
-        metodoPago: loan.ultimoPagoMetodo || 'DIGITAL',
-        nroOperacion: loan.ultimoNroOperacion || '',
-        cuotasCubiertas,
-        totalCuotas,
-        modalidad: loan.modalidad || 'DIARIO'
+        metodoPago: loan.ultimoPagoMetodo || 'YAPE',
+        nroOperacion: loan.ultimoNroOperacion || ''
       });
     } else {
       mensajePlano = generarEstadoCuentaAntiSpam({
@@ -2206,13 +1946,12 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
           <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full"><X size={16} /></button>
         </div>
 
-        {/* BOTÓN RÁPIDO: COMENZAR NUEVO PRÉSTAMO DESDE AHORA (BORRA EL PRÉSTAMO ANTERIOR) */}
         <div className="bg-emerald-950/30 border border-emerald-500/40 rounded-2xl p-3.5 space-y-2.5">
           <span className="text-[10px] font-black text-emerald-300 uppercase block">
             🔄 ¿Ya estás en un NUEVO PRÉSTAMO con {loan.prestamista}?
           </span>
           <p className="text-[10px] text-slate-300 font-bold">
-            Úsalo para Liliana, Dayra, Gael, etc. Borra sus pagos viejos, inicia su nuevo ciclo limpio y lo marca como &quot;Ya me prestó&quot;.
+            Borra sus pagos viejos, inicia su nuevo ciclo limpio y lo marca como &quot;Ya me prestó&quot;.
           </p>
           <div className="grid grid-cols-3 gap-2">
             <div>
@@ -2295,7 +2034,7 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
               <input type="tel" value={editWhatsApp} onChange={(e) => setEditWhatsApp(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-2.5 text-sm font-bold" />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Yape</label>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Yape / Plin</label>
               <input type="tel" value={editYape} onChange={(e) => setEditYape(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-2.5 text-sm font-bold" />
             </div>
           </div>
@@ -2339,7 +2078,6 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
             </div>
           )}
 
-          {/* Opciones de Limpieza y Bloqueo de Ruleteo */}
           <div className="space-y-2 pt-2">
             <label className="flex items-center gap-2 text-xs font-bold text-rose-300 cursor-pointer">
               <input
@@ -2414,7 +2152,6 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
                       ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
                       : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
                   }`}
-                  title="Toca para cambiar si ya te prestó o si está disponible para ruletear"
                 >
                   {loan.yaMePrestoBloqueado ? '🔒 Ya me prestó' : '⚡ Ruleteable'}
                 </button>
@@ -2619,7 +2356,7 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
 }
 
 // ==========================================
-// MODAL DE PAGO + AUTO-COPIADO YAPE + SUBIDA DE SCREENSHOT YAPE
+// MODAL DE PAGO SIMPLIFICADO (YAPE PREFERENCIAL / PLIN / EFECTIVO + VOUCHER DE TEXTO ANTI-SPAM)
 // ==========================================
 function PaymentModal({ loan, initialAmount = null, autoCopiedInitial = false, onClose, onSubmit }) {
   const esFijo = loan.modalidad === 'FIJO';
@@ -2632,20 +2369,18 @@ function PaymentModal({ loan, initialAmount = null, autoCopiedInitial = false, o
   const [amount, setAmount] = useState(defaultAmt.toString());
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('DIGITAL');
+  // YAPE por defecto (preferencial), también PLIN y EFECTIVO
+  const [paymentMethod, setPaymentMethod] = useState('YAPE');
   const [nroOperacion, setNroOperacion] = useState('');
-  const [voucherPreview, setVoucherPreview] = useState(null);
   const [yapeCopiedBanner, setYapeCopiedBanner] = useState(autoCopiedInitial || Boolean(loan.yape));
   
   const [isSuccess, setIsSuccess] = useState(false);
   const [paidAmount, setPaidAmount] = useState(0);
-  const [paidMethod, setPaidMethod] = useState('');
+  const [paidMethod, setPaidMethod] = useState('YAPE');
   const [paidOp, setPaidOp] = useState('');
-  const [ticketCopiado, setTicketCopiado] = useState(false);
-  const [statusMensaje, setStatusMensaje] = useState('');
+  const [voucherTextoActual, setVoucherTextoActual] = useState('');
+  const [copiedVoucherText, setCopiedVoucherText] = useState(false);
 
-  const canvasRef = useRef(null);
-  
   const todayStr = getLocalTodayString();
   const requiresPassword = loan.lastManualPaymentDate === todayStr && (loan.manualPaymentsCount || 0) >= 1;
 
@@ -2656,67 +2391,27 @@ function PaymentModal({ loan, initialAmount = null, autoCopiedInitial = false, o
     }
   }, [loan]);
 
-  useEffect(() => {
-    const handlePaste = (e) => {
-      if (isSuccess) return;
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (let item of items) {
-        if (item.type.indexOf('image') !== -1) {
-          const file = item.getAsFile();
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => setVoucherPreview(ev.target.result);
-            reader.readAsDataURL(file);
-          }
-        }
-      }
-    };
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, [isSuccess]);
-
-  const handlePasteFromClipboardButton = async () => {
-    try {
-      if (!navigator.clipboard || !navigator.clipboard.read) {
-        setError('Usa el botón "Subir Screenshot" para elegir la captura de tu galería');
-        return;
-      }
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const imageType = item.types.find(t => t.startsWith('image/'));
-        if (imageType) {
-          const blob = await item.getType(imageType);
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            setVoucherPreview(ev.target.result);
-            setError('');
-          };
-          reader.readAsDataURL(blob);
-          return;
-        }
-      }
-      setError('No se detectó imagen en el portapapeles. Usa "Subir Screenshot".');
-    } catch (err) {
-      setError('Elige tu captura con el botón "Subir Screenshot".');
-    }
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setVoucherPreview(ev.target.result);
-      setError('');
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handleManualCopyYape = () => {
     if (!loan.yape) return;
     copyTextSafe(loan.yape);
     setYapeCopiedBanner(true);
+  };
+
+  const construirNuevoMensajeVoucher = (montoPagado, metodoUsado, opUsada) => {
+    const saldoActualizado = Math.max(0, loan.saldoPendiente - montoPagado);
+    const hoy = new Date();
+    const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+
+    return generarMensajeAntiSpam({
+      prestamista: loan.prestamista,
+      fechaStr,
+      horaStr,
+      montoAbono: montoPagado,
+      saldoRestante: saldoActualizado,
+      metodoPago: metodoUsado,
+      nroOperacion: opUsada
+    });
   };
 
   const handleSubmit = async () => {
@@ -2725,157 +2420,94 @@ function PaymentModal({ loan, initialAmount = null, autoCopiedInitial = false, o
     if (numAmount > loan.saldoPendiente) return setError("Excede deuda máxima");
     if (requiresPassword && password !== 'KGB2026') return setError("ACCESO DENEGADO. Clave incorrecta.");
     
-    await onSubmit(loan.id, numAmount, paymentMethod, nroOperacion.trim());
+    const opLimpia = nroOperacion.trim();
+    await onSubmit(loan.id, numAmount, paymentMethod, opLimpia);
     setPaidAmount(numAmount);
     setPaidMethod(paymentMethod);
-    setPaidOp(nroOperacion.trim());
+    setPaidOp(opLimpia);
+    setVoucherTextoActual(construirNuevoMensajeVoucher(numAmount, paymentMethod, opLimpia));
     setIsSuccess(true);
   };
 
-  useEffect(() => {
-    if (!isSuccess || !canvasRef.current) return;
-    const hoy = new Date();
-    const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-    const nuevoSaldo = Math.max(0, loan.saldoPendiente - paidAmount);
-    const nuevoPagado = (loan.pagadoAcumulado || 0) + paidAmount;
-
-    renderTicketCanvas(canvasRef.current, {
-      prestamista: loan.prestamista,
-      fechaStr,
-      horaStr,
-      montoAbono: paidAmount,
-      deudaTotal: loan.deudaTotal || 600,
-      totalPagado: nuevoPagado,
-      saldoRestante: nuevoSaldo,
-      cuotaDiaria: loan.cuotaDiaria || 25,
-      metodoPago: paidMethod,
-      nroOperacion: paidOp,
-      voucherDataUrl: voucherPreview,
-      modalidad: loan.modalidad || 'DIARIO',
-      fechaVencimiento: loan.fechaVencimiento || ''
-    });
-  }, [isSuccess, paidAmount, paidMethod, paidOp, voucherPreview, loan]);
-
-  const copiarTicketAlPortapapeles = async () => {
-    if (!canvasRef.current) return false;
-    try {
-      const blob = await new Promise(res => canvasRef.current.toBlob(res, 'image/png'));
-      if (blob && navigator.clipboard && window.ClipboardItem) {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        setTicketCopiado(true);
-        setStatusMensaje('¡Imagen copiada! Solo presiona Ctrl+V en el chat de WhatsApp');
-        setTimeout(() => setTicketCopiado(false), 3500);
-        return true;
-      }
-    } catch (err) {
-      console.error("No se pudo copiar al portapapeles:", err);
-    }
-    return false;
+  const handleCambiarVariacionMensaje = () => {
+    setVoucherTextoActual(construirNuevoMensajeVoucher(paidAmount, paidMethod, paidOp));
   };
 
-  const descargarTicketPNG = () => {
-    if (!canvasRef.current) return;
-    const link = document.createElement('a');
-    link.download = `Ticket_${loan.prestamista}_${getLocalTodayString()}.png`;
-    link.href = canvasRef.current.toDataURL('image/png');
-    link.click();
+  const handleCopiarTextoVoucher = () => {
+    copyTextSafe(voucherTextoActual);
+    setCopiedVoucherText(true);
+    setTimeout(() => setCopiedVoucherText(false), 2500);
   };
 
-  const handleRebotarAlPrestamista = async () => {
-    const saldoActualizado = Math.max(0, loan.saldoPendiente - paidAmount);
-    const pagadoActualizado = (loan.pagadoAcumulado || 0) + paidAmount;
-    const cuotaSegura = loan.cuotaDiaria > 0 ? loan.cuotaDiaria : 25;
-    const totalCuotas = Math.max(1, Math.round((loan.deudaTotal || 600) / cuotaSegura)) || 24;
-    const cuotasCubiertas = Math.floor((pagadoActualizado + 0.001) / cuotaSegura);
-
-    const hoy = new Date();
-    const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-
-    const mensajePlano = generarMensajeAntiSpam({
-      prestamista: loan.prestamista,
-      fechaStr,
-      horaStr,
-      montoAbono: paidAmount,
-      saldoRestante: saldoActualizado,
-      metodoPago: paidMethod,
-      nroOperacion: paidOp,
-      cuotasCubiertas,
-      totalCuotas,
-      modalidad: loan.modalidad || 'DIARIO'
-    });
-
-    await copiarTicketAlPortapapeles();
-
-    if (canvasRef.current && navigator.canShare) {
-      try {
-        const blob = await new Promise(res => canvasRef.current.toBlob(res, 'image/png'));
-        const file = new File([blob], `Ticket_${loan.prestamista}.png`, { type: 'image/png' });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: `Comprobante ${loan.prestamista}`,
-            text: mensajePlano,
-            files: [file]
-          });
-          return;
-        }
-      } catch (err) {}
-    }
-
-    if (loan.telefono) {
-      const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(mensajePlano)}`;
-      window.open(urlSegura, '_blank');
-    }
+  const handleEnviarVoucherWhatsApp = () => {
+    if (!loan.telefono) return;
+    const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(voucherTextoActual)}`;
+    window.open(urlSegura, '_blank');
   };
 
   if (isSuccess) {
     return (
-      <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-3 overflow-y-auto animate-in fade-in duration-300">
-        <div className="bg-[#0a0a0a] w-full max-w-md rounded-[36px] border border-emerald-500/30 p-5 sm:p-6 relative overflow-hidden my-auto max-h-[94dvh] flex flex-col">
-          <div className="flex justify-between items-center mb-3 shrink-0">
+      <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+        <div className="bg-[#0a0a0a] w-full max-w-sm rounded-[34px] border border-emerald-500/40 p-6 relative overflow-hidden flex flex-col space-y-4">
+          <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <CheckCircle size={22} className="text-emerald-400" />
-              <h3 className="text-base font-black text-white uppercase tracking-tight">Ticket Oficial Generado</h3>
+              <div>
+                <h3 className="text-base font-black text-white uppercase tracking-tight">Pago Registrado</h3>
+                <span className="text-[10px] font-bold text-emerald-400 uppercase block">
+                  Vía: {paidMethod} • S/ {paidAmount.toFixed(2)}
+                </span>
+              </div>
             </div>
             <button onClick={onClose} className="bg-white/5 p-2 rounded-full text-slate-400 hover:text-white">
               <X size={18} />
             </button>
           </div>
 
-          <div className="overflow-y-auto rounded-2xl border border-white/10 bg-black/60 p-2 mb-3 flex-1 [&::-webkit-scrollbar]:hidden">
-            <canvas ref={canvasRef} className="w-full h-auto rounded-xl shadow-lg" />
+          <div className="bg-black/80 border border-white/10 rounded-2xl p-4 space-y-2.5">
+            <div className="flex justify-between items-center">
+              <span className="text-[9px] font-black text-cyan-400 uppercase tracking-widest">
+                Voucher del Día (Anti-Spam)
+              </span>
+              <button
+                type="button"
+                onClick={handleCambiarVariacionMensaje}
+                className="text-[9px] font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1 hover:bg-emerald-500/25 uppercase"
+              >
+                <RefreshCw size={11} />
+                <span>Otro Mensaje</span>
+              </button>
+            </div>
+            <pre className="text-xs text-slate-200 font-sans whitespace-pre-wrap leading-relaxed bg-white/[0.03] p-3 rounded-xl border border-white/5">
+              {voucherTextoActual}
+            </pre>
+            <p className="text-[10px] text-amber-300/90 font-bold">
+              💡 Al abrir WhatsApp se enviará este voucher y ahí mismo adjuntas tu pantallazo directo desde Yape.
+            </p>
           </div>
 
-          {statusMensaje && (
-            <p className="text-[11px] text-emerald-400 font-black text-center mb-2 animate-pulse">
-              {statusMensaje}
-            </p>
-          )}
-
-          <div className="space-y-2.5 shrink-0">
+          <div className="space-y-2.5">
             <button 
-              onClick={handleRebotarAlPrestamista} 
-              className="w-full bg-[#25D366] hover:bg-[#1ebd5a] text-black font-black py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all text-xs uppercase tracking-wider"
+              onClick={handleEnviarVoucherWhatsApp} 
+              className="w-full bg-[#25D366] hover:bg-[#1ebd5a] text-black font-black py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(37,211,102,0.3)]"
             >
               <MessageCircle size={18} />
-              <span>Rebotar Ticket + Mensaje a {loan.prestamista}</span>
+              <span>Enviar Voucher por WhatsApp a {loan.prestamista}</span>
             </button>
 
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={copiarTicketAlPortapapeles}
-                className="bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 font-black py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 hover:bg-cyan-500/25 transition-all uppercase"
-              >
-                {ticketCopiado ? <Check size={15} /> : <Copy size={15} />}
-                <span>{ticketCopiado ? '¡Imagen Copiada!' : 'Copiar Imagen'}</span>
-              </button>
-              <button
-                onClick={descargarTicketPNG}
+                onClick={handleCopiarTextoVoucher}
                 className="bg-white/5 border border-white/10 text-slate-200 font-black py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 hover:bg-white/10 transition-all uppercase"
               >
-                <Download size={15} />
-                <span>Descargar PNG</span>
+                {copiedVoucherText ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                <span>{copiedVoucherText ? '¡Texto Copiado!' : 'Copiar Voucher'}</span>
+              </button>
+              <button
+                onClick={onClose}
+                className="bg-white/5 border border-white/10 text-slate-400 font-black py-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 hover:text-white transition-all uppercase"
+              >
+                <span>Cerrar</span>
               </button>
             </div>
           </div>
@@ -2902,7 +2534,7 @@ function PaymentModal({ loan, initialAmount = null, autoCopiedInitial = false, o
               </div>
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-fuchsia-300 block">
-                  {yapeCopiedBanner ? '¡Nº Yape Copiado Automáticamente!' : 'Número Yape del Cobrador'}
+                  {yapeCopiedBanner ? '¡Nº Yape Copiado Automáticamente!' : 'Número Yape / Plin del Cobrador'}
                 </span>
                 <span className="text-sm font-black text-white tracking-wider">{loan.yape}</span>
               </div>
@@ -2918,9 +2550,46 @@ function PaymentModal({ loan, initialAmount = null, autoCopiedInitial = false, o
           </div>
         ) : null}
         
-        <div className="flex gap-2 mb-4 relative z-10">
-          <button onClick={() => setPaymentMethod('DIGITAL')} className={`flex-1 py-2.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 border transition-all ${paymentMethod === 'DIGITAL' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50' : 'bg-black/50 text-slate-500 border-white/5'}`}><Smartphone size={15}/> YAPE / DIGITAL</button>
-          <button onClick={() => setPaymentMethod('EFECTIVO')} className={`flex-1 py-2.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 border transition-all ${paymentMethod === 'EFECTIVO' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' : 'bg-black/50 text-slate-500 border-white/5'}`}><Banknote size={15}/> EFECTIVO</button>
+        {/* Selector de Vía de Pago: YAPE (Preferencial), PLIN o EFECTIVO */}
+        <div className="grid grid-cols-3 gap-2 mb-4 relative z-10">
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('YAPE')}
+            className={`py-2.5 rounded-2xl text-[11px] font-black flex items-center justify-center gap-1.5 border transition-all ${
+              paymentMethod === 'YAPE'
+                ? 'bg-[#742284]/40 text-fuchsia-300 border-fuchsia-400 shadow-[0_0_15px_rgba(217,70,239,0.25)]'
+                : 'bg-black/50 text-slate-500 border-white/5'
+            }`}
+          >
+            <Smartphone size={14} />
+            <span>YAPE ★</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('PLIN')}
+            className={`py-2.5 rounded-2xl text-[11px] font-black flex items-center justify-center gap-1.5 border transition-all ${
+              paymentMethod === 'PLIN'
+                ? 'bg-cyan-500/25 text-cyan-300 border-cyan-400'
+                : 'bg-black/50 text-slate-500 border-white/5'
+            }`}
+          >
+            <Smartphone size={14} />
+            <span>PLIN</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('EFECTIVO')}
+            className={`py-2.5 rounded-2xl text-[11px] font-black flex items-center justify-center gap-1.5 border transition-all ${
+              paymentMethod === 'EFECTIVO'
+                ? 'bg-emerald-500/25 text-emerald-300 border-emerald-400'
+                : 'bg-black/50 text-slate-500 border-white/5'
+            }`}
+          >
+            <Banknote size={14} />
+            <span>EFECTIVO</span>
+          </button>
         </div>
 
         <div className="space-y-4 mb-5 relative z-10">
@@ -2939,55 +2608,17 @@ function PaymentModal({ loan, initialAmount = null, autoCopiedInitial = false, o
               className="w-full bg-black border-2 border-emerald-500/30 text-white rounded-2xl px-4 py-3 text-2xl font-black outline-none focus:border-emerald-400 text-center" />
           </div>
 
-          <div className="bg-white/5 border border-cyan-500/30 rounded-2xl p-3.5 space-y-3">
-            <span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest flex items-center gap-1.5">
-              <Camera size={14} /> Pasar Screenshot de Yape a la Plataforma
-            </span>
-
-            {!voucherPreview ? (
-              <div className="grid grid-cols-2 gap-2">
-                <label className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl border border-dashed border-emerald-500/50 bg-emerald-950/30 text-emerald-300 text-[10px] font-black cursor-pointer text-center uppercase">
-                  <Upload size={18} className="text-emerald-400" />
-                  <span>Subir Screenshot</span>
-                  <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
-                </label>
-
-                <button
-                  type="button"
-                  onClick={handlePasteFromClipboardButton}
-                  className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl border border-dashed border-cyan-500/50 bg-cyan-950/30 text-cyan-300 text-[10px] font-black text-center uppercase"
-                >
-                  <Clipboard size={18} className="text-cyan-400" />
-                  <span>Pegar Captura</span>
-                </button>
-              </div>
-            ) : (
-              <div className="relative rounded-xl overflow-hidden border border-emerald-500/50 bg-black/70 p-2 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <img src={voucherPreview} alt="Screenshot Yape" className="w-12 h-12 object-cover rounded-lg border border-white/10" />
-                  <div>
-                    <span className="text-[10px] font-black text-emerald-400 uppercase block">✓ Screenshot Cargado</span>
-                    <span className="text-[9px] text-slate-400">Se unirá al ticket oficial</span>
-                  </div>
-                </div>
-                <button type="button" onClick={() => setVoucherPreview(null)} className="text-rose-400 p-1.5 rounded-lg">
-                  <X size={16} />
-                </button>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-[9px] font-bold text-slate-400 mb-1 uppercase">Nº de Operación Yape (Opcional)</label>
-              <div className="relative">
-                <Hash size={14} className="absolute left-3.5 top-2.5 text-slate-500" />
-                <input
-                  type="text"
-                  value={nroOperacion}
-                  onChange={(e) => setNroOperacion(e.target.value)}
-                  placeholder="Ej. 1492837"
-                  className="w-full bg-black/70 border border-white/10 text-white rounded-xl pl-9 pr-3 py-2 text-xs font-bold outline-none focus:border-cyan-400"
-                />
-              </div>
+          <div>
+            <label className="block text-[9px] font-bold text-slate-400 mb-1 uppercase">Nº de Operación (Opcional)</label>
+            <div className="relative">
+              <Hash size={14} className="absolute left-3.5 top-2.5 text-slate-500" />
+              <input
+                type="text"
+                value={nroOperacion}
+                onChange={(e) => setNroOperacion(e.target.value)}
+                placeholder="Ej. 1492837"
+                className="w-full bg-black/70 border border-white/10 text-white rounded-xl pl-9 pr-3 py-2 text-xs font-bold outline-none focus:border-cyan-400"
+              />
             </div>
           </div>
 
@@ -3003,9 +2634,9 @@ function PaymentModal({ loan, initialAmount = null, autoCopiedInitial = false, o
           {error && <p className="text-rose-400 text-xs font-bold text-center uppercase animate-pulse">{error}</p>}
         </div>
 
-        <button onClick={handleSubmit} className="w-full bg-emerald-500 text-black font-black py-4 rounded-2xl text-sm tracking-widest uppercase">
+        <button onClick={handleSubmit} className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black py-4 rounded-2xl text-sm tracking-widest uppercase transition-all">
            <span className="flex justify-center items-center gap-2">
-             <span>Procesar y Generar Ticket</span>
+             <span>Registrar Pago y Preparar Voucher</span>
              <CheckCircle size={18}/>
            </span>
         </button>
@@ -3160,7 +2791,7 @@ function AddLoanTab({ onAdd }) {
               <input type="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm font-bold outline-none" placeholder="999..." />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Nº Yape</label>
+              <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Nº Yape / Plin</label>
               <input type="tel" value={yape} onChange={(e) => setYape(e.target.value)} className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm font-bold outline-none" placeholder="999..." />
             </div>
           </div>
@@ -3272,20 +2903,16 @@ function AddLoanTab({ onAdd }) {
 }
 
 // ==========================================
-// HISTORIAL POR COBRADOR (SOLO MUESTRA LOS PRESTAMISTAS ACTUALES + BOTÓN LIMPIAR ANTERIORES)
+// HISTORIAL POR COBRADOR (SIN GENERADOR DE HOJA DE IMAGEN)
 // ==========================================
 function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHistory, onPurgeAllOldHistory }) {
-  // SOLO mostrar los cobradores que existen actualmente en la lista de préstamos vigentes
   const listaCobradores = useMemo(() => {
     const nombresLoans = loans.map(l => l.prestamista).filter(Boolean);
     return [...new Set(nombresLoans)];
   }, [loans]);
 
   const [selectedCobrador, setSelectedCobrador] = useState('');
-  const [showTicketModal, setShowTicketModal] = useState(false);
-  const [copiadoImg, setCopiadoImg] = useState(false);
   const [purgingNotice, setPurgingNotice] = useState('');
-  const historyCanvasRef = useRef(null);
 
   useEffect(() => {
     if (listaCobradores.length > 0 && (!selectedCobrador || !listaCobradores.includes(selectedCobrador))) {
@@ -3296,7 +2923,6 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
   const loanActual = loans.find(l => l.prestamista === selectedCobrador);
   const esFijo = loanActual?.modalidad === 'FIJO';
 
-  // Filtrar solo logs que correspondan al préstamo actual
   const logsDelCobrador = (logs || []).filter(
     log => (loanActual && log.loanId === loanActual.id) || log.prestamista === selectedCobrador
   );
@@ -3329,83 +2955,26 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
     setTimeout(() => setPurgingNotice(''), 3000);
   };
 
-  useEffect(() => {
-    if (!showTicketModal || !historyCanvasRef.current || !selectedCobrador) return;
-    const hoy = new Date();
-    const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-    const ultimoPago = pagosRegistrados[0];
+  const handleReenviarVoucherPago = (log) => {
+    if (!loanActual?.telefono) return;
+    const fechaObj = new Date(log.fecha);
+    const fechaStr = !isNaN(fechaObj.getTime())
+      ? fechaObj.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : getLocalTodayString();
+    const horaStr = formatTime(log.fecha);
 
-    renderTicketCanvas(historyCanvasRef.current, {
+    const msg = generarMensajeAntiSpam({
       prestamista: selectedCobrador,
       fechaStr,
       horaStr,
-      montoAbono: ultimoPago ? ultimoPago.monto : 0,
-      deudaTotal,
-      totalPagado: totalPagadoReal,
+      montoAbono: log.monto,
       saldoRestante: saldoPendienteReal,
-      cuotaDiaria,
-      metodoPago: ultimoPago?.metodo || 'DIGITAL',
-      nroOperacion: ultimoPago?.nroOperacion || '',
-      voucherDataUrl: null,
-      modalidad: loanActual?.modalidad || 'DIARIO',
-      fechaVencimiento: loanActual?.fechaVencimiento || ''
-    });
-  }, [showTicketModal, selectedCobrador, deudaTotal, totalPagadoReal, saldoPendienteReal, cuotaDiaria, pagosRegistrados, loanActual]);
-
-  const copiarCartillaPortapapeles = async () => {
-    if (!historyCanvasRef.current) return;
-    try {
-      const blob = await new Promise(res => historyCanvasRef.current.toBlob(res, 'image/png'));
-      if (blob && navigator.clipboard && window.ClipboardItem) {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        setCopiadoImg(true);
-        setTimeout(() => setCopiadoImg(false), 3000);
-      }
-    } catch (e) {
-      console.error("Error al copiar imagen:", e);
-    }
-  };
-
-  const descargarCartillaPNG = () => {
-    if (!historyCanvasRef.current) return;
-    const link = document.createElement('a');
-    link.download = `Cartilla_${selectedCobrador}.png`;
-    link.href = historyCanvasRef.current.toDataURL('image/png');
-    link.click();
-  };
-
-  const enviarCartillaWhatsApp = async () => {
-    await copiarCartillaPortapapeles();
-    const hoy = new Date();
-    const fechaStr = hoy.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const horaStr = hoy.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
-
-    const msg = generarEstadoCuentaAntiSpam({
-      prestamista: selectedCobrador,
-      fechaStr,
-      horaStr,
-      saldoRestante: saldoPendienteReal,
-      exigible: loanActual?.montoExigible || 0,
-      modalidad: loanActual?.modalidad || 'DIARIO',
-      fechaVencimiento: loanActual?.fechaVencimiento || ''
+      metodoPago: log.metodo || 'YAPE',
+      nroOperacion: log.nroOperacion || ''
     });
 
-    if (historyCanvasRef.current && navigator.canShare) {
-      try {
-        const blob = await new Promise(res => historyCanvasRef.current.toBlob(res, 'image/png'));
-        const file = new File([blob], `Cartilla_${selectedCobrador}.png`, { type: 'image/png' });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ title: `Cartilla ${selectedCobrador}`, text: msg, files: [file] });
-          return;
-        }
-      } catch (e) {}
-    }
-
-    if (loanActual?.telefono) {
-      const url = `https://api.whatsapp.com/send?phone=51${loanActual.telefono}&text=${encodeURIComponent(msg)}`;
-      window.open(url, '_blank');
-    }
+    const url = `https://api.whatsapp.com/send?phone=51${loanActual.telefono}&text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
   };
 
   if (listaCobradores.length === 0) {
@@ -3470,7 +3039,7 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
             </span>
             <h3 className="text-xl font-black text-white tracking-tight">{selectedCobrador}</h3>
             {loanActual?.yape && (
-              <span className="text-[10px] font-bold text-fuchsia-400 block mt-0.5">Yape: {loanActual.yape}</span>
+              <span className="text-[10px] font-bold text-fuchsia-400 block mt-0.5">Yape / Plin: {loanActual.yape}</span>
             )}
           </div>
           <div className="text-right">
@@ -3500,32 +3069,22 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowTicketModal(true)}
-            className="flex-1 bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 border border-cyan-400/40 text-cyan-300 font-black py-3 rounded-2xl text-xs uppercase tracking-widest flex items-center justify-center gap-2"
-          >
-            <ImageIcon size={16} />
-            <span>Ticket ({esFijo ? 'Pago Único' : `${totalCuotasContrato} Casillas`})</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleCleanCurrentLenderLogs}
-            className="px-3 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-300 hover:text-rose-300 text-[10px] font-black uppercase"
-            title="Limpiar lista de pagos anteriores de este cobrador"
-          >
-            Limpiar Ciclo Viejo
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleCleanCurrentLenderLogs}
+          className="w-full py-2.5 rounded-2xl bg-white/5 border border-white/10 text-slate-300 hover:text-rose-300 text-[10px] font-black uppercase"
+        >
+          🧹 Limpiar Pagos de Ciclo Viejo de {selectedCobrador}
+        </button>
       </div>
 
-      {/* Tablero Visual de las 24 Cuotas */}
+      {/* Control Interno Visual de las 24 Cuotas */}
       {!esFijo && (
         <div className="bg-[#0a0a0a]/90 border border-white/10 rounded-[28px] p-5 backdrop-blur-xl">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <LayoutGrid size={16} className="text-cyan-400" />
-              <h4 className="text-xs font-black uppercase tracking-widest text-white">Cartilla de {totalCuotasContrato} Cuotas (S/ {cuotaDiaria} c/u)</h4>
+              <h4 className="text-xs font-black uppercase tracking-widest text-white">Control Interno: {totalCuotasContrato} Cuotas (S/ {cuotaDiaria} c/u)</h4>
             </div>
             <span className="text-[10px] font-bold text-emerald-400">{Math.max(0, totalCuotasContrato - cuotasCompletas)} pendientes</span>
           </div>
@@ -3568,7 +3127,7 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
       {/* Lista de Pagos del Préstamo Actual */}
       <div className="space-y-3">
         <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 px-1">
-          Pagos del Ciclo Actual a {selectedCobrador} ({pagosRegistrados.length})
+          Vouchers Registrados a {selectedCobrador} ({pagosRegistrados.length})
         </h4>
 
         {pagosCronologicos.length === 0 ? (
@@ -3578,7 +3137,8 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
         ) : (
           [...pagosCronologicos].reverse().map((log, revIdx) => {
             const numeroAbono = pagosCronologicos.length - revIdx;
-            const esEfectivo = log.metodo === 'EFECTIVO' || (log.descripcion && log.descripcion.toLowerCase().includes('efectivo'));
+            const metodoTag = log.metodo === 'EFECTIVO' ? 'Efectivo' : log.metodo === 'PLIN' ? 'Plin' : 'Yape';
+            const esEfectivo = metodoTag === 'Efectivo';
             const numYape = log.yapeAsociado || loanActual?.yape || '';
 
             return (
@@ -3589,10 +3149,10 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
                       Abono #{numeroAbono}
                     </span>
                     <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border uppercase flex items-center gap-1 ${
-                      esEfectivo ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30'
+                      esEfectivo ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30'
                     }`}>
                       {esEfectivo ? <Banknote size={10} /> : <Smartphone size={10} />}
-                      {esEfectivo ? 'Efectivo' : `Yape ${numYape ? `(${numYape})` : ''}`}
+                      {esEfectivo ? 'Efectivo' : `${metodoTag} ${numYape ? `(${numYape})` : ''}`}
                     </span>
                     {log.nroOperacion && (
                       <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10">
@@ -3605,8 +3165,17 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="text-lg font-black text-emerald-400">S/ {(log.monto || 0).toFixed(2)}</span>
+                  {loanActual?.telefono && (
+                    <button
+                      onClick={() => handleReenviarVoucherPago(log)}
+                      className="bg-green-500/15 text-green-400 p-2 rounded-xl border border-green-500/30 hover:bg-green-500/30"
+                      title="Reenviar voucher de texto por WhatsApp"
+                    >
+                      <MessageCircle size={15} />
+                    </button>
+                  )}
                   <button
                     onClick={() => onRevert(log)}
                     className="bg-rose-500/10 text-rose-400 p-2 rounded-xl border border-rose-500/30 hover:bg-rose-500/30"
@@ -3634,7 +3203,8 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
           </div>
         ) : (
           borradosRegistrados.map((log) => {
-            const esEfectivo = log.metodo === 'EFECTIVO' || (log.descripcion && log.descripcion.toLowerCase().includes('efectivo'));
+            const metodoTag = log.metodo === 'EFECTIVO' ? 'Efectivo' : log.metodo === 'PLIN' ? 'Plin' : 'Yape';
+            const esEfectivo = metodoTag === 'Efectivo';
             const numYape = log.yapeAsociado || loanActual?.yape || '';
 
             return (
@@ -3646,7 +3216,7 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
                     </span>
                     <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30 uppercase flex items-center gap-1">
                       {esEfectivo ? <Banknote size={10} /> : <Smartphone size={10} />}
-                      {esEfectivo ? 'Efectivo' : `Yape ${numYape ? `(${numYape})` : ''}`}
+                      {esEfectivo ? 'Efectivo' : `${metodoTag} ${numYape ? `(${numYape})` : ''}`}
                     </span>
                   </div>
                   <p className="text-xs font-black text-white">Cobrador: {log.prestamista}</p>
@@ -3673,49 +3243,6 @@ function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHist
           })
         )}
       </div>
-
-      {showTicketModal && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-3">
-          <div className="bg-[#0a0a0a] w-full max-w-md rounded-[34px] border border-cyan-500/30 p-5 flex flex-col max-h-[92dvh]">
-            <div className="flex justify-between items-center mb-3">
-              <h4 className="text-sm font-black text-white uppercase tracking-wider">Cartilla Digital: {selectedCobrador}</h4>
-              <button onClick={() => setShowTicketModal(false)} className="bg-white/5 p-2 rounded-full text-slate-400 hover:text-white">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="overflow-y-auto rounded-2xl border border-white/10 bg-black p-2 mb-3 flex-1 [&::-webkit-scrollbar]:hidden">
-              <canvas ref={historyCanvasRef} className="w-full h-auto rounded-xl" />
-            </div>
-
-            <div className="space-y-2">
-              <button
-                onClick={enviarCartillaWhatsApp}
-                className="w-full bg-[#25D366] hover:bg-[#1ebd5a] text-black font-black py-3 rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2"
-              >
-                <Share2 size={16} />
-                <span>Enviar Cartilla a {selectedCobrador} por WhatsApp</span>
-              </button>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={copiarCartillaPortapapeles}
-                  className="bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 font-black py-2.5 rounded-xl text-[11px] uppercase flex items-center justify-center gap-1.5"
-                >
-                  {copiadoImg ? <Check size={15} /> : <Copy size={15} />}
-                  <span>{copiadoImg ? '¡Copiada (Ctrl+V)!' : 'Copiar Imagen'}</span>
-                </button>
-                <button
-                  onClick={descargarCartillaPNG}
-                  className="bg-white/5 border border-white/10 text-slate-300 font-black py-2.5 rounded-xl text-[11px] uppercase flex items-center justify-center gap-1.5"
-                >
-                  <Download size={15} />
-                  <span>Descargar PNG</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
