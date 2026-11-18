@@ -6,7 +6,9 @@ import {
   Zap, ShieldAlert, Wifi, WifiOff, Loader,
   MessageCircle, Copy, Check, History, Clock, FileText,
   Banknote, Smartphone, User, LayoutGrid, Image as ImageIcon,
-  Download, Share2, Upload, Calculator, ArrowRight, Hash, Sparkles
+  Download, Share2, Upload, Calculator, ArrowRight, Hash,
+  Camera, RotateCcw, Clipboard, BellRing, CalendarClock,
+  Layers, RefreshCw, Search, Sparkles, Flame, Ban
 } from 'lucide-react';
 
 // --- Firebase Imports ---
@@ -33,6 +35,28 @@ const db = getFirestore(app);
 const coleccionGlobal = 'boveda_global'; 
 const coleccionHistorial = 'historial_global';
 
+// --- Utilidad para copiar texto de forma segura en cualquier navegador ---
+const copyTextSafe = (text) => {
+  if (!text) return false;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.opacity = '0';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
 // --- Utilidades de Fecha Seguras ---
 const getLocalTodayString = () => {
   const d = new Date();
@@ -52,10 +76,21 @@ const addDaysToDateStr = (dateStr, days) => {
   return `${year}-${month}-${day}`;
 };
 
+const getDaysUntilDue = (dueDateStr) => {
+  if (!dueDateStr) return 999;
+  const cleanStr = dueDateStr.includes('T') ? dueDateStr.split('T')[0] : dueDateStr;
+  const todayStr = getLocalTodayString();
+  const todayDate = new Date(todayStr + 'T12:00:00');
+  const dueDate = new Date(cleanStr + 'T12:00:00');
+  if (isNaN(dueDate.getTime())) return 999;
+  const diffMs = dueDate.getTime() - todayDate.getTime();
+  return Math.round(diffMs / (1000 * 60 * 60 * 24));
+};
+
 const getDayOfWeek = (dateStr) => {
   if (!dateStr) return 0;
   const d = new Date(dateStr + 'T12:00:00');
-  return d.getDay(); // 0 = Domingo
+  return d.getDay();
 };
 
 const getEndDate = (startDate, daysToAdd) => {
@@ -64,14 +99,15 @@ const getEndDate = (startDate, daysToAdd) => {
   let added = 0;
   while (added < daysToAdd) {
     date.setDate(date.getDate() + 1);
-    if (date.getDay() !== 0) added++; // Saltar domingos
+    if (date.getDay() !== 0) added++;
   }
   return date;
 };
 
 const formatDate = (dateString) => {
   if (!dateString) return 'Fecha inválida';
-  const date = new Date(dateString);
+  const cleanStr = dateString.length === 10 ? dateString + 'T12:00:00' : dateString;
+  const date = new Date(cleanStr);
   if (isNaN(date.getTime())) return 'Fecha inválida';
   return date.toLocaleDateString('es-PE', { weekday: 'short', day: '2-digit', month: 'short' });
 };
@@ -86,13 +122,15 @@ const formatTime = (dateString) => {
 // ==========================================
 // MOTOR ANTI-SPAM DE WHATSAPP (22 VARIACIONES + Nº OPERACIÓN)
 // ==========================================
-const generarMensajeAntiSpam = ({ prestamista, fechaStr, horaStr, montoAbono, saldoRestante, metodoPago, nroOperacion, cuotasCubiertas, totalCuotas }) => {
+const generarMensajeAntiSpam = ({ prestamista, fechaStr, horaStr, montoAbono, saldoRestante, metodoPago, nroOperacion, cuotasCubiertas, totalCuotas, modalidad }) => {
   const esEfectivo = metodoPago === 'EFECTIVO';
   const viaTexto = esEfectivo ? 'en efectivo (mano a mano)' : 'por billetera digital (Yape)';
   const monto = Number(montoAbono || 0).toFixed(2);
   const saldo = Number(saldoRestante || 0).toFixed(2);
   const lineaOp = nroOperacion ? `\n\uD83D\uDD22 N\u00BA Operaci\u00F3n: ${nroOperacion}` : '';
-  const lineaProgreso = (cuotasCubiertas !== undefined && totalCuotas) ? `\n\uD83D\uDCCA Progreso: ${cuotasCubiertas}/${totalCuotas} cuotas` : '';
+  const lineaProgreso = modalidad === 'FIJO'
+    ? `\n\uD83D\uDCCC Modalidad: Pago Fijo`
+    : (cuotasCubiertas !== undefined && totalCuotas) ? `\n\uD83D\uDCCA Progreso: ${cuotasCubiertas}/${totalCuotas} cuotas` : '';
 
   const plantillas = [
     () => `\uD83E\uDD1D Hola ${prestamista}, adjunto mi comprobante del pago de hoy ${viaTexto}.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB3 Abono: S/ ${monto}${lineaOp}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}${lineaProgreso}\n\n\u2728 \u00A1Saludos!`,
@@ -123,14 +161,15 @@ const generarMensajeAntiSpam = ({ prestamista, fechaStr, horaStr, montoAbono, sa
   return plantillas[indiceAleatorio]();
 };
 
-const generarEstadoCuentaAntiSpam = ({ prestamista, fechaStr, horaStr, saldoRestante, exigible }) => {
+const generarEstadoCuentaAntiSpam = ({ prestamista, fechaStr, horaStr, saldoRestante, exigible, modalidad, fechaVencimiento }) => {
   const saldo = Number(saldoRestante || 0).toFixed(2);
   const mora = Number(exigible || 0).toFixed(2);
+  const extraFijo = modalidad === 'FIJO' && fechaVencimiento ? `\n\uD83D\uDDD3\uFE0F Vencimiento Pactado: ${formatDate(fechaVencimiento)}` : `\n\u26A0\uFE0F Exigible hoy: S/ ${mora}`;
 
   const plantillasEstado = [
-    () => `\uD83E\uDD1D Hola ${prestamista}, te comparto el resumen actualizado de nuestra cuenta al d\u00EDa de hoy.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}\n\u26A0\uFE0F Exigible hoy: S/ ${mora}\n\n\u2728 \u00A1Saludos!`,
-    () => `\uD83D\uDC4B Qu\u00E9 tal ${prestamista}, paso a enviarte el estado de cuenta actualizado:\n\n\uD83D\uDDD3\uFE0F D\u00EDa: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\uD83D\uDCCA Por pagar: S/ ${saldo}\n\uD83D\uDD14 Cuota pendiente: S/ ${mora}\n\n\uD83D\uDE4C \u00A1Buen d\u00EDa!`,
-    () => `\uD83D\uDCDD Saludos ${prestamista}, as\u00ED va el avance de la cuenta hasta este momento:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB0 Resta total: S/ ${saldo}\n\uD83D\uDCB3 Exigible actual: S/ ${mora}\n\n\uD83D\uDC4D \u00A1Seguimos en contacto!`
+    () => `\uD83E\uDD1D Hola ${prestamista}, te comparto el resumen actualizado de nuestra cuenta al d\u00EDa de hoy.\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB0 Saldo restante: S/ ${saldo}${extraFijo}\n\n\u2728 \u00A1Saludos!`,
+    () => `\uD83D\uDC4B Qu\u00E9 tal ${prestamista}, paso a enviarte el estado de cuenta actualizado:\n\n\uD83D\uDDD3\uFE0F D\u00EDa: ${fechaStr}\n\uD83D\uDD52 Hora: ${horaStr}\n\uD83D\uDCCA Por pagar: S/ ${saldo}${extraFijo}\n\n\uD83D\uDE4C \u00A1Buen d\u00EDa!`,
+    () => `\uD83D\uDCDD Saludos ${prestamista}, as\u00ED va el avance de la cuenta hasta este momento:\n\n\uD83D\uDCC5 Fecha: ${fechaStr}\n\u23F0 Hora: ${horaStr}\n\uD83D\uDCB0 Resta total: S/ ${saldo}${extraFijo}\n\n\uD83D\uDC4D \u00A1Seguimos en contacto!`
   ];
 
   const idx = Math.floor(Math.random() * plantillasEstado.length);
@@ -138,7 +177,7 @@ const generarEstadoCuentaAntiSpam = ({ prestamista, fechaStr, horaStr, saldoRest
 };
 
 // ==========================================
-// GENERADOR DE TICKET EN IMAGEN (CANVAS 24 CASILLAS + VOUCHER)
+// GENERADOR DE TICKET EN IMAGEN (CANVAS 24 CASILLAS O PAGO FIJO + VOUCHER)
 // ==========================================
 const dibujarRectanguloRedondeado = (ctx, x, y, width, height, radius) => {
   ctx.beginPath();
@@ -165,14 +204,17 @@ const renderTicketCanvas = async (canvas, {
   cuotaDiaria,
   metodoPago,
   nroOperacion,
-  voucherDataUrl
+  voucherDataUrl,
+  modalidad = 'DIARIO',
+  fechaVencimiento = ''
 }) => {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
 
-  const totalCuotas = Math.max(1, Math.round((deudaTotal || 600) / (cuotaDiaria || 25))) || 24;
+  const esFijo = modalidad === 'FIJO';
+  const totalCuotas = esFijo ? 1 : (Math.max(1, Math.round((deudaTotal || 600) / (cuotaDiaria || 25))) || 24);
   const cols = 6;
-  const rows = Math.ceil(totalCuotas / cols);
+  const rows = esFijo ? 2 : Math.ceil(totalCuotas / cols);
 
   const extraVoucherHeight = voucherDataUrl ? 340 : 0;
   const width = 720;
@@ -181,7 +223,6 @@ const renderTicketCanvas = async (canvas, {
   canvas.width = width;
   canvas.height = height;
 
-  // Fondo Principal Oscuro Futurista
   const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
   bgGrad.addColorStop(0, '#040914');
   bgGrad.addColorStop(0.5, '#070b12');
@@ -189,34 +230,29 @@ const renderTicketCanvas = async (canvas, {
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
 
-  // Halo Neón Superior
   const radialGrad = ctx.createRadialGradient(width / 2, 70, 10, width / 2, 70, 320);
-  radialGrad.addColorStop(0, 'rgba(16, 185, 129, 0.22)');
+  radialGrad.addColorStop(0, esFijo ? 'rgba(168, 85, 247, 0.22)' : 'rgba(16, 185, 129, 0.22)');
   radialGrad.addColorStop(1, 'rgba(16, 185, 129, 0)');
   ctx.fillStyle = radialGrad;
   ctx.fillRect(0, 0, width, 350);
 
-  // Marco Exterior del Ticket
-  ctx.strokeStyle = 'rgba(52, 211, 153, 0.35)';
+  ctx.strokeStyle = esFijo ? 'rgba(192, 132, 252, 0.4)' : 'rgba(52, 211, 153, 0.35)';
   ctx.lineWidth = 2;
   dibujarRectanguloRedondeado(ctx, 24, 24, width - 48, height - 48, 28);
   ctx.stroke();
 
-  // Encabezado
-  ctx.fillStyle = '#10b981';
+  ctx.fillStyle = esFijo ? '#c084fc' : '#10b981';
   ctx.font = '900 15px sans-serif';
-  ctx.fillText('GOTATRACKER // COMPROBANTE & CONTROL DE CUOTAS', 56, 68);
+  ctx.fillText(esFijo ? 'GOTATRACKER // COMPROBANTE DE PAGO ÚNICO / FECHA FIJA' : 'GOTATRACKER // COMPROBANTE & CONTROL DE CUOTAS', 56, 68);
 
   ctx.fillStyle = '#ffffff';
   ctx.font = '900 36px sans-serif';
   ctx.fillText(`COBRADOR: ${String(prestamista || '').toUpperCase()}`, 56, 112);
 
-  // Etiqueta Fecha y Hora
   ctx.fillStyle = '#94a3b8';
   ctx.font = 'bold 16px sans-serif';
   ctx.fillText(`FECHA: ${fechaStr}   •   HORA: ${horaStr}`, 56, 144);
 
-  // Badge de Método y Nº de Operación
   const viaLabel = metodoPago === 'EFECTIVO' ? 'VÍA: EFECTIVO MANO A MANO' : 'VÍA: YAPE / BILLETERA DIGITAL';
   const opLabel = nroOperacion ? `   •   OPERACIÓN #${nroOperacion}` : '';
   ctx.fillStyle = 'rgba(6, 182, 212, 0.14)';
@@ -230,7 +266,6 @@ const renderTicketCanvas = async (canvas, {
   ctx.font = '900 15px sans-serif';
   ctx.fillText(`${viaLabel}${opLabel}`, 74, 190);
 
-  // Caja Principal: Abono Registrado Hoy
   ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
   dibujarRectanguloRedondeado(ctx, 56, 224, width - 112, 110, 20);
   ctx.fill();
@@ -244,9 +279,8 @@ const renderTicketCanvas = async (canvas, {
 
   ctx.fillStyle = '#ffffff';
   ctx.font = '900 44px sans-serif';
-  ctx.fillText(montoAbono > 0 ? `S/ ${Number(montoAbono).toFixed(2)}` : `CUOTA S/ ${Number(cuotaDiaria).toFixed(2)}`, 80, 308);
+  ctx.fillText(montoAbono > 0 ? `S/ ${Number(montoAbono).toFixed(2)}` : (esFijo ? `TOTAL S/ ${Number(deudaTotal).toFixed(2)}` : `CUOTA S/ ${Number(cuotaDiaria).toFixed(2)}`), 80, 308);
 
-  // 3 Cajas Financieras: Deuda Total | Total Pagado | Saldo Restante
   const boxY = 354;
   const boxW = (width - 112 - 24) / 3;
   const metricas = [
@@ -273,59 +307,79 @@ const renderTicketCanvas = async (canvas, {
     ctx.fillText(m.val, x + 16, boxY + 64);
   });
 
-  // Título de la Cartilla de 24 Cuotas
-  const cuotasCompletas = Math.floor((Number(totalPagado || 0) + 0.001) / (cuotaDiaria || 25));
-  const residuoParcial = Math.max(0, Number(totalPagado || 0) - (cuotasCompletas * (cuotaDiaria || 25)));
-
-  ctx.fillStyle = '#e2e8f0';
-  ctx.font = '900 16px sans-serif';
-  ctx.fillText(`CARTILLA DE ${totalCuotas} CUOTAS (S/ ${cuotaDiaria} C/U)   —   ${Math.min(totalCuotas, cuotasCompletas)}/${totalCuotas} COMPLETADAS`, 56, 480);
-
-  // Dibujar Grilla de 24 Casillas
   const gridStartY = 502;
   const cellGap = 10;
-  const cellW = (width - 112 - (cellGap * (cols - 1))) / cols;
   const cellH = 62;
 
-  for (let i = 0; i < totalCuotas; i++) {
-    const num = i + 1;
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const x = 56 + col * (cellW + cellGap);
-    const y = gridStartY + row * (cellH + cellGap);
+  if (esFijo) {
+    const porc = Math.min(100, Math.round(((totalPagado || 0) / (deudaTotal || 1)) * 100));
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '900 16px sans-serif';
+    ctx.fillText(`MODALIDAD: PAGO ÚNICO / FECHA FIJA   —   AVANCE: ${porc}%`, 56, 480);
 
-    const isPaid = num <= cuotasCompletas;
-    const isPartial = num === cuotasCompletas + 1 && residuoParcial > 0.01;
-
-    if (isPaid) {
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
-      ctx.strokeStyle = '#10b981';
-    } else if (isPartial) {
-      ctx.fillStyle = 'rgba(245, 158, 11, 0.22)';
-      ctx.strokeStyle = '#f59e0b';
-    } else {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    }
-
-    dibujarRectanguloRedondeado(ctx, x, y, cellW, cellH, 12);
+    ctx.fillStyle = 'rgba(168, 85, 247, 0.14)';
+    dibujarRectanguloRedondeado(ctx, 56, gridStartY, width - 112, 115, 18);
     ctx.fill();
-    ctx.lineWidth = isPaid || isPartial ? 1.8 : 1;
+    ctx.strokeStyle = 'rgba(192, 132, 252, 0.45)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    ctx.fillStyle = isPaid ? '#6ee7b7' : isPartial ? '#fcd34d' : '#64748b';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.fillText(`DÍA ${num}`, x + 12, y + 20);
+    ctx.fillStyle = '#d8b4fe';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText(`FECHA DE PAGO PACTADA: ${fechaVencimiento ? formatDate(fechaVencimiento).toUpperCase() : 'DEFINIDA EN CONTRATO'}`, 80, gridStartY + 38);
 
-    ctx.fillStyle = isPaid ? '#ffffff' : isPartial ? '#fef08a' : '#475569';
-    ctx.font = '900 14px sans-serif';
-    const textoCasilla = isPaid ? `✓ S/${cuotaDiaria}` : isPartial ? `S/${residuoParcial.toFixed(0)}` : `S/${cuotaDiaria}`;
-    ctx.fillText(textoCasilla, x + 12, y + 46);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 22px sans-serif';
+    ctx.fillText(saldoRestante <= 0 ? '✓ CONTRATO DE PAGO ÚNICO LIQUIDADO AL 100%' : `PENDIENTE POR LIQUIDAR: S/ ${Number(saldoRestante).toFixed(2)}`, 80, gridStartY + 82);
+  } else {
+    const cuotasCompletas = Math.floor((Number(totalPagado || 0) + 0.001) / (cuotaDiaria || 25));
+    const residuoParcial = Math.max(0, Number(totalPagado || 0) - (cuotasCompletas * (cuotaDiaria || 25)));
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '900 16px sans-serif';
+    ctx.fillText(`CARTILLA DE ${totalCuotas} CUOTAS (S/ ${cuotaDiaria} C/U)   —   ${Math.min(totalCuotas, cuotasCompletas)}/${totalCuotas} COMPLETADAS`, 56, 480);
+
+    const cellW = (width - 112 - (cellGap * (cols - 1))) / cols;
+
+    for (let i = 0; i < totalCuotas; i++) {
+      const num = i + 1;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = 56 + col * (cellW + cellGap);
+      const y = gridStartY + row * (cellH + cellGap);
+
+      const isPaid = num <= cuotasCompletas;
+      const isPartial = num === cuotasCompletas + 1 && residuoParcial > 0.01;
+
+      if (isPaid) {
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+        ctx.strokeStyle = '#10b981';
+      } else if (isPartial) {
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.22)';
+        ctx.strokeStyle = '#f59e0b';
+      } else {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      }
+
+      dibujarRectanguloRedondeado(ctx, x, y, cellW, cellH, 12);
+      ctx.fill();
+      ctx.lineWidth = isPaid || isPartial ? 1.8 : 1;
+      ctx.stroke();
+
+      ctx.fillStyle = isPaid ? '#6ee7b7' : isPartial ? '#fcd34d' : '#64748b';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(`DÍA ${num}`, x + 12, y + 20);
+
+      ctx.fillStyle = isPaid ? '#ffffff' : isPartial ? '#fef08a' : '#475569';
+      ctx.font = '900 14px sans-serif';
+      const textoCasilla = isPaid ? `✓ S/${cuotaDiaria}` : isPartial ? `S/${residuoParcial.toFixed(0)}` : `S/${cuotaDiaria}`;
+      ctx.fillText(textoCasilla, x + 12, y + 46);
+    }
   }
 
   let footerY = gridStartY + rows * (cellH + cellGap) + 25;
 
-  // Si el usuario adjuntó la captura del Yape al programa, incrustarla en el ticket
   if (voucherDataUrl) {
     await new Promise((resolve) => {
       const img = new Image();
@@ -338,7 +392,7 @@ const renderTicketCanvas = async (canvas, {
 
         ctx.fillStyle = '#22d3ee';
         ctx.font = '900 13px sans-serif';
-        ctx.fillText('CAPTURA DE YAPE / VOUCHER VERIFICADO EN SISTEMA:', 76, footerY + 28);
+        ctx.fillText('SCREENSHOT DE YAPE / VOUCHER VERIFICADO EN SISTEMA:', 76, footerY + 28);
 
         const maxW = width - 152;
         const maxH = 245;
@@ -357,7 +411,6 @@ const renderTicketCanvas = async (canvas, {
     });
   }
 
-  // Pie de Ticket
   ctx.fillStyle = '#475569';
   ctx.font = 'bold 12px sans-serif';
   ctx.fillText('VERIFICADO POR GOTATRACKER 2026 • SINCRONIZACIÓN EN TIEMPO REAL', 56, height - 42);
@@ -397,7 +450,6 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    // Escuchar Préstamos
     const loansRef = collection(db, coleccionGlobal);
     const unsubLoans = onSnapshot(loansRef, async (snapshot) => {
       setFirebaseStatus('connected'); 
@@ -411,9 +463,25 @@ export default function App() {
       } else {
         const fetchedLoans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Lógica de Mora Automática
         for (let loan of fetchedLoans) {
           if (loan.saldoPendiente <= 0) continue;
+
+          if (loan.modalidad === 'FIJO') {
+            const diasParaVencer = getDaysUntilDue(loan.fechaVencimiento);
+            const debeSerExigible = diasParaVencer <= 0 ? (loan.saldoPendiente || 0) : 0;
+            if ((loan.montoExigible || 0) !== debeSerExigible) {
+              try {
+                const loanDoc = doc(db, coleccionGlobal, loan.id);
+                await updateDoc(loanDoc, {
+                  montoExigible: debeSerExigible,
+                  lastProcessedDate: todayStr
+                });
+              } catch (error) {
+                console.error("Error actualizando préstamo fijo:", error);
+              }
+            }
+            continue;
+          }
 
           let lastProc = loan.lastProcessedDate || yesterdayStr;
           let checkDate = addDaysToDateStr(lastProc, 1);
@@ -451,7 +519,6 @@ export default function App() {
       setLoadingData(false);
     });
 
-    // Escuchar Historial Global
     const historyRef = collection(db, coleccionHistorial);
     const unsubHistory = onSnapshot(historyRef, (snapshot) => {
       const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -468,25 +535,45 @@ export default function App() {
   // --- Cálculos Globales ---
   const stats = useMemo(() => {
     let totalDeuda = 0, cuotaHoy = 0, totalCapital = 0, totalIntereses = 0;
-    let saldoTotal = 0, exigibleTotal = 0;
+    let saldoTotal = 0, exigibleTotal = 0, alertasFijasCount = 0, disponiblesRuleteoCount = 0;
 
     loans.forEach(loan => {
+      const saldo = loan.saldoPendiente || 0;
+      const cuota = loan.cuotaDiaria || 25;
+      const diasRest = cuota > 0 ? Math.ceil(saldo / cuota) : 99;
+
+      // Disponibles para ruleteo: En S/ 0 o por terminar (<= 5 días) y que NO estén marcados como "Ya me prestó (Bloqueado)"
+      if (!loan.yaMePrestoBloqueado && (saldo <= 0 || (loan.modalidad !== 'FIJO' && diasRest <= 5))) {
+        disponiblesRuleteoCount++;
+      }
+
       totalDeuda += (loan.deudaTotal || 0);
-      saldoTotal += (loan.saldoPendiente || 0);
+      saldoTotal += saldo;
       totalCapital += (loan.capital || 0);
       totalIntereses += (loan.interes || 0);
       
-      if (loan.saldoPendiente > 0) {
-        cuotaHoy += Math.min((loan.cuotaDiaria || 0), (loan.saldoPendiente || 0));
-        exigibleTotal += (loan.montoExigible || 0);
+      if (saldo > 0) {
+        if (loan.modalidad === 'FIJO') {
+          const diasRestantes = getDaysUntilDue(loan.fechaVencimiento);
+          const umbralAlerta = loan.diasAlerta || 5;
+          if (diasRestantes <= umbralAlerta) {
+            alertasFijasCount++;
+          }
+          if (diasRestantes <= 0) {
+            exigibleTotal += saldo;
+          }
+        } else {
+          cuotaHoy += Math.min(cuota, saldo);
+          exigibleTotal += (loan.montoExigible || 0);
+        }
       }
     });
 
-    return { totalDeuda, cuotaHoy, totalCapital, totalIntereses, saldoTotal, exigibleTotal };
+    return { totalDeuda, cuotaHoy, totalCapital, totalIntereses, saldoTotal, exigibleTotal, alertasFijasCount, disponiblesRuleteoCount };
   }, [loans]);
 
   // --- Función de Registro de Historial ---
-  const logActivity = async (tipo, prestamista, descripcion, monto = 0, loanId = null, metodo = 'DIGITAL', nroOperacion = '') => {
+  const logActivity = async (tipo, prestamista, descripcion, monto = 0, loanId = null, metodo = 'DIGITAL', nroOperacion = '', extraData = {}) => {
     try {
       await addDoc(collection(db, coleccionHistorial), {
         tipo,
@@ -496,10 +583,55 @@ export default function App() {
         loanId,
         metodo,
         nroOperacion,
-        fecha: new Date().toISOString()
+        fecha: new Date().toISOString(),
+        ...extraData
       });
     } catch (error) {
       console.error("Error al guardar en historial:", error);
+    }
+  };
+
+  // --- LIMPIAR HISTORIAL VIEJO DE UN COBRADOR CUANDO EMPIEZA NUEVO PRÉSTAMO ---
+  const purgeOldLogsForLender = async (prestamistaName, loanId = null) => {
+    const oldLogs = historyLogs.filter(
+      l => (loanId && l.loanId === loanId) || (l.prestamista || '').toLowerCase() === (prestamistaName || '').toLowerCase()
+    );
+    for (const log of oldLogs) {
+      try {
+        await deleteDoc(doc(db, coleccionHistorial, log.id));
+      } catch (e) {
+        console.error("Error borrando log antiguo:", e);
+      }
+    }
+  };
+
+  // --- LIMPIAR TODOS LOS HISTORIALES DE PRÉSTAMOS ANTERIORES QUE YA NO EXISTEN ---
+  const handlePurgeAllOldHistory = async (borrarTodoElHistorial = false) => {
+    if (!user) return;
+    const activeNames = new Set(loans.map(l => (l.prestamista || '').toLowerCase()));
+    const activeIds = new Set(loans.map(l => l.id));
+
+    for (const log of historyLogs) {
+      const belongsToCurrent = activeIds.has(log.loanId) || activeNames.has((log.prestamista || '').toLowerCase());
+      if (borrarTodoElHistorial || !belongsToCurrent) {
+        try {
+          await deleteDoc(doc(db, coleccionHistorial, log.id));
+        } catch (e) {
+          console.error("Error limpiando historial:", e);
+        }
+      }
+    }
+  };
+
+  // --- MARCAR / DESMARCAR "YA ME PRESTÓ (EN NUEVO PRÉSTAMO)" PARA QUE NO SALGA EN EL DOMINÓ ---
+  const handleToggleYaMePresto = async (loanId, newValue) => {
+    if (!user || !loanId) return;
+    try {
+      await updateDoc(doc(db, coleccionGlobal, loanId), {
+        yaMePrestoBloqueado: Boolean(newValue)
+      });
+    } catch (error) {
+      console.error("Error actualizando estado Ya me prestó:", error);
     }
   };
 
@@ -516,6 +648,9 @@ export default function App() {
     const nuevoExigible = Math.max(0, (loan.montoExigible || 0) - amountPaid);
     const nuevoPagado = (loan.pagadoAcumulado || 0) + amountPaid;
 
+    // Si llega a 0, queda libre para volver a prestar en el ruleteo
+    const desbloquearRuleteo = nuevoSaldo <= 0 ? false : loan.yaMePrestoBloqueado;
+
     try {
       const loanDoc = doc(db, coleccionGlobal, loan.id);
       await updateDoc(loanDoc, {
@@ -526,37 +661,119 @@ export default function App() {
         manualPaymentsCount: count + 1,
         ultimoPagoMonto: amountPaid,
         ultimoPagoMetodo: paymentMethod,
-        ultimoNroOperacion: nroOperacion || ''
+        ultimoNroOperacion: nroOperacion || '',
+        cupoDisponible: loan.cupoDisponible || loan.capital || 600,
+        yaMePrestoBloqueado: desbloquearRuleteo
       });
 
       const opInfo = nroOperacion ? ` (Op. #${nroOperacion})` : '';
-      await logActivity('PAGO', loan.prestamista, `Abono en ${paymentMethod.toLowerCase()} a favor de ${loan.prestamista}${opInfo}`, amountPaid, loan.id, paymentMethod, nroOperacion);
+      await logActivity('PAGO', loan.prestamista, `Abono en ${paymentMethod.toLowerCase()} a favor de ${loan.prestamista}${opInfo}`, amountPaid, loan.id, paymentMethod, nroOperacion, {
+        yapeAsociado: loan.yape || ''
+      });
     } catch (error) {
       console.error("Error al registrar pago:", error);
       setFirebaseStatus('error');
     }
   };
 
-  const handleEdit = async (id, prestamista, telefono, yape, nuevoSaldo, nuevaCuota, nuevoExigible, nuevaFecha) => {
+  // --- INICIAR NUEVO PRÉSTAMO / RENOVAR BORRANDO EL PRÉSTAMO ANTERIOR Y MARCANDO "YA ME PRESTÓ" ---
+  const handleRenewLoan = async (loan, nuevoCapitalNegociado, nuevaCuotaNegociada, cuotasYaPagadasNuevoCiclo = 0) => {
+    if (!user || !loan) return;
+    try {
+      const todayStr = getLocalTodayString();
+
+      // 1. Borrar todos los pagos del préstamo anterior de este cobrador para que comience limpio desde ahora
+      await purgeOldLogsForLender(loan.prestamista, loan.id);
+
+      const cap = parseFloat(nuevoCapitalNegociado) || loan.capital || 600;
+      const porc = loan.porcentajeInteres !== undefined ? loan.porcentajeInteres : 20;
+      const nuevoInteres = cap * (porc / 100);
+      const nuevaDeudaTotal = cap + nuevoInteres;
+      const esFijo = loan.modalidad === 'FIJO';
+      const cuotaCalculada = esFijo ? 0 : (parseFloat(nuevaCuotaNegociada) || Math.round(nuevaDeudaTotal / 24));
+      const pagadoInicialNuevo = (parseFloat(cuotasYaPagadasNuevoCiclo) || 0) * cuotaCalculada;
+      const saldoInicialNuevo = Math.max(0, nuevaDeudaTotal - pagadoInicialNuevo);
+
+      const loanDoc = doc(db, coleccionGlobal, loan.id);
+      await updateDoc(loanDoc, {
+        capital: cap,
+        cupoDisponible: cap,
+        interes: nuevoInteres,
+        deudaTotal: nuevaDeudaTotal,
+        cuotaDiaria: cuotaCalculada,
+        saldoPendiente: saldoInicialNuevo,
+        pagadoAcumulado: pagadoInicialNuevo,
+        montoExigible: 0,
+        fechaInicio: new Date(todayStr + 'T12:00:00').toISOString(),
+        lastProcessedDate: todayStr,
+        lastManualPaymentDate: null,
+        manualPaymentsCount: 0,
+        ultimoPagoMonto: 0,
+        ciclosCompletados: (loan.ciclosCompletados || 0) + 1,
+        // Como ya nos acaba de prestar en este nuevo ciclo, queda bloqueado para que NO aparezca como disponible para prestar otra vez
+        yaMePrestoBloqueado: true
+      });
+
+      await logActivity(
+        'NUEVO',
+        loan.prestamista,
+        `Nuevo préstamo actual iniciado: Capital S/ ${cap.toFixed(0)} (Ya me prestó - Ciclo limpio)`,
+        cap,
+        loan.id
+      );
+    } catch (error) {
+      console.error("Error al renovar préstamo:", error);
+      setFirebaseStatus('error');
+    }
+  };
+
+  const handleUpdateCupoNegociado = async (loanId, nuevoCupo, nuevaCuotaSugerida) => {
+    if (!user || !loanId) return;
+    try {
+      const loanDoc = doc(db, coleccionGlobal, loanId);
+      await updateDoc(loanDoc, {
+        cupoDisponible: parseFloat(nuevoCupo) || 600,
+        cuotaNegociada: parseFloat(nuevaCuotaSugerida) || 0
+      });
+    } catch (error) {
+      console.error("Error al actualizar cupo negociado:", error);
+    }
+  };
+
+  const handleEdit = async (id, prestamista, telefono, yape, nuevoSaldo, nuevaCuota, nuevoExigible, nuevaFecha, modalidadEdit = 'DIARIO', fechaVencimientoEdit = '', diasAlertaEdit = 5, cupoEdit = 0, limpiarHistorialAnterior = false, yaMePrestoEdit = false) => {
     if (!user) return;
     try {
       const loan = loans.find(l => l.id === id);
-      const deudaTotal = loan?.deudaTotal || 0;
+      const capNum = parseFloat(cupoEdit) || loan?.capital || 600;
+      const porc = loan?.porcentajeInteres !== undefined ? loan.porcentajeInteres : 20;
+      const interesCalc = capNum * (porc / 100);
+      const deudaTotal = capNum + interesCalc;
       const saldoNum = parseFloat(nuevoSaldo) || 0;
       const nuevoPagadoAcumulado = Math.max(0, deudaTotal - saldoNum);
+
+      if (limpiarHistorialAnterior && loan) {
+        await purgeOldLogsForLender(prestamista || loan.prestamista, id);
+      }
 
       const loanDoc = doc(db, coleccionGlobal, id);
       await updateDoc(loanDoc, {
         prestamista: prestamista || '',
         telefono: telefono || '',
         yape: yape || '',
+        capital: capNum,
+        interes: interesCalc,
+        deudaTotal: deudaTotal,
         saldoPendiente: saldoNum,
         pagadoAcumulado: nuevoPagadoAcumulado,
-        cuotaDiaria: parseFloat(nuevaCuota) || 0,
+        cuotaDiaria: modalidadEdit === 'FIJO' ? 0 : (parseFloat(nuevaCuota) || 0),
         montoExigible: parseFloat(nuevoExigible) || 0,
-        fechaInicio: new Date(nuevaFecha + 'T12:00:00').toISOString()
+        fechaInicio: new Date(nuevaFecha + 'T12:00:00').toISOString(),
+        modalidad: modalidadEdit,
+        fechaVencimiento: modalidadEdit === 'FIJO' ? fechaVencimientoEdit : '',
+        diasAlerta: parseInt(diasAlertaEdit, 10) || 5,
+        cupoDisponible: capNum,
+        yaMePrestoBloqueado: Boolean(yaMePrestoEdit)
       });
-      if(loan) await logActivity('EDICION', prestamista || loan.prestamista, `Parámetros modificados manualmente`, 0, id);
     } catch (error) {
       console.error("Error al editar:", error);
       setFirebaseStatus('error');
@@ -566,10 +783,21 @@ export default function App() {
   const handleAddLoan = async (newLoan) => {
     if (!user) return;
     try {
+      // Si había un préstamo viejo con el mismo nombre, limpiamos sus registros antiguos para que empiece de cero
+      await purgeOldLogsForLender(newLoan.prestamista, null);
+
       const loansRef = collection(db, coleccionGlobal);
-      const docRef = await addDoc(loansRef, newLoan);
+      const docRef = await addDoc(loansRef, {
+        ...newLoan,
+        // Todo nuevo préstamo que agregas ahora significa que ESE cobrador YA TE PRESTÓ (está corriendo su nuevo ciclo)
+        yaMePrestoBloqueado: true
+      });
       
-      await logActivity('NUEVO', newLoan.prestamista, `Se inyectó un nuevo préstamo a ${newLoan.prestamista}`, newLoan.capital, docRef.id);
+      const desc = newLoan.modalidad === 'FIJO'
+        ? `Nuevo préstamo Fijo (${formatDate(newLoan.fechaVencimiento)}) de ${newLoan.prestamista}`
+        : `Nuevo préstamo actual iniciado con ${newLoan.prestamista}`;
+
+      await logActivity('NUEVO', newLoan.prestamista, desc, newLoan.capital, docRef.id);
       
       setActiveTab('dashboard');
     } catch (error) {
@@ -583,9 +811,8 @@ export default function App() {
     try {
       const loan = loans.find(l => l.id === id);
       if (loan) {
-        await logActivity('ELIMINACION', loan.prestamista, `Se eliminó por completo el contrato de ${loan.prestamista}`, 0, id);
+        await purgeOldLogsForLender(loan.prestamista, id);
       }
-      
       const loanDoc = doc(db, coleccionGlobal, id);
       await deleteDoc(loanDoc);
     } catch (error) {
@@ -594,7 +821,6 @@ export default function App() {
     }
   };
 
-  // --- MOTOR DE REVERSA ---
   const handleRevertLog = async (log) => {
     if (!user) return;
     if (log.tipo !== 'PAGO') return; 
@@ -614,17 +840,44 @@ export default function App() {
         });
       }
 
+      const metodoOriginal = log.metodo || (log.descripcion && log.descripcion.toLowerCase().includes('efectivo') ? 'EFECTIVO' : 'DIGITAL');
+      const yapeOriginal = log.yapeAsociado || loan?.yape || '';
+
       await deleteDoc(doc(db, coleccionHistorial, log.id));
-      await logActivity('REVERSO', log.prestamista, `Reversión de pago erróneo (-S/ ${log.monto.toFixed(2)})`, log.monto, log.loanId);
+      await logActivity(
+        'REVERSO',
+        log.prestamista,
+        `Pago borrado/anulado (-S/ ${Number(log.monto || 0).toFixed(2)})`,
+        log.monto,
+        log.loanId,
+        metodoOriginal,
+        log.nroOperacion || '',
+        {
+          yapeAsociado: yapeOriginal,
+          fechaPagoOriginal: log.fecha
+        }
+      );
       
     } catch (error) {
       console.error("Error al revertir pago:", error);
     }
   };
 
-  // Abrir modal de pago (opcionalmente con un monto precalculado por Caja del Día)
+  const handleDeleteRevertedLog = async (logId) => {
+    if (!user || !logId) return;
+    try {
+      await deleteDoc(doc(db, coleccionHistorial, logId));
+    } catch (error) {
+      console.error("Error al limpiar registro borrado:", error);
+    }
+  };
+
   const openPaymentWithAmount = (loan, customAmount = null) => {
-    setPaymentModalData({ loan, customAmount });
+    let autoCopied = false;
+    if (loan?.yape) {
+      autoCopied = copyTextSafe(loan.yape);
+    }
+    setPaymentModalData({ loan, customAmount, autoCopied });
   };
 
   if (loadingAuth || loadingData) {
@@ -668,7 +921,7 @@ export default function App() {
           
           <div className="flex justify-between items-end">
             <div>
-              <p className="text-slate-500 text-xs mb-1 font-bold uppercase tracking-wider">Deuda Global</p>
+              <p className="text-slate-500 text-xs mb-1 font-bold uppercase tracking-wider">Deuda Global Actual</p>
               <h2 className="text-4xl font-black text-white tracking-tighter drop-shadow-[0_2px_10px_rgba(255,255,255,0.1)]">
                 <span className="text-emerald-500/50 text-2xl mr-1">S/</span>
                 <span>{stats.saldoTotal.toFixed(2)}</span>
@@ -686,16 +939,46 @@ export default function App() {
 
         {/* Content Area */}
         <main className="flex-1 overflow-y-auto p-4 pb-28 relative z-10 scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          {activeTab === 'dashboard' && <DashboardTab loans={loans} stats={stats} onPayRequest={openPaymentWithAmount} onEdit={handleEdit} onDelete={handleDelete} />}
+          {activeTab === 'dashboard' && (
+            <DashboardTab 
+              loans={loans} 
+              stats={stats} 
+              onPayRequest={openPaymentWithAmount} 
+              onEdit={handleEdit} 
+              onDelete={handleDelete}
+              onRenew={handleRenewLoan}
+              onToggleYaMePresto={handleToggleYaMePresto}
+              onGoToDomino={() => setActiveTab('domino')}
+            />
+          )}
+          {activeTab === 'domino' && (
+            <DominoUrgentPlanTab
+              loans={loans}
+              onPayToZero={(loan) => openPaymentWithAmount(loan, loan.saldoPendiente)}
+              onRenewLoan={handleRenewLoan}
+              onUpdateCupo={handleUpdateCupoNegociado}
+              onToggleYaMePresto={handleToggleYaMePresto}
+            />
+          )}
           {activeTab === 'add' && <AddLoanTab onAdd={handleAddLoan} />}
-          {activeTab === 'history' && <HistoryTab logs={historyLogs} loans={loans} onRevert={handleRevertLog} />}
+          {activeTab === 'history' && (
+            <HistoryTab
+              logs={historyLogs}
+              loans={loans}
+              onRevert={handleRevertLog}
+              onDeleteReverted={handleDeleteRevertedLog}
+              onPurgeLenderHistory={purgeOldLogsForLender}
+              onPurgeAllOldHistory={handlePurgeAllOldHistory}
+            />
+          )}
           {activeTab === 'insights' && <InsightsTab stats={stats} loans={loans} />}
         </main>
 
         {/* Bottom Nav compacta y estática */}
         <div className="absolute bottom-0 left-0 right-0 p-3 pointer-events-none z-30 flex justify-center bg-gradient-to-t from-black/80 to-transparent pt-8">
-          <nav className="pointer-events-auto bg-slate-900/95 backdrop-blur-2xl border border-white/10 flex justify-around p-1.5 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-full max-w-[380px]">
-            <NavItem icon={<Home size={18} />} label="Panel" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+          <nav className="pointer-events-auto bg-slate-900/95 backdrop-blur-2xl border border-white/10 flex justify-around p-1.5 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] w-full max-w-[395px]">
+            <NavItem icon={<Home size={18} />} label="Panel" isActive={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} badge={stats.alertasFijasCount} />
+            <NavItem icon={<Layers size={18} />} label="Ruleteo" isActive={activeTab === 'domino'} onClick={() => setActiveTab('domino')} badge={stats.disponiblesRuleteoCount} />
             <NavItem icon={<PlusCircle size={18} />} label="Nuevo" isActive={activeTab === 'add'} onClick={() => setActiveTab('add')} />
             <NavItem icon={<History size={18} />} label="Cobrador" isActive={activeTab === 'history'} onClick={() => setActiveTab('history')} />
             <NavItem icon={<PieChart size={18} />} label="Datos" isActive={activeTab === 'insights'} onClick={() => setActiveTab('insights')} />
@@ -706,6 +989,7 @@ export default function App() {
           <PaymentModal 
             loan={paymentModalData.loan} 
             initialAmount={paymentModalData.customAmount}
+            autoCopiedInitial={paymentModalData.autoCopied}
             onClose={() => setPaymentModalData(null)} 
             onSubmit={executePayment} 
           />
@@ -716,41 +1000,708 @@ export default function App() {
 }
 
 // ==========================================
-// MÓDULO CAJA DEL DÍA (DISTRIBUIDOR DE RUTA DE PAGOS)
+// MÓDULO DE RULETEO & PLAN DE PRÉSTAMO URGENTE (EXCLUYE A LOS QUE "YA ME PRESTARON")
+// ==========================================
+function DominoUrgentPlanTab({ loans, onPayToZero, onRenewLoan, onUpdateCupo, onToggleYaMePresto }) {
+  const [metaUrgenteStr, setMetaUrgenteStr] = useState('1500');
+  const [customCaps, setCustomCaps] = useState({});
+  const [customQuotas, setCustomQuotas] = useState({});
+  const [savedNoticeId, setSavedNoticeId] = useState(null);
+  const [processingId, setProcessingId] = useState(null);
+
+  const metaUrgente = parseFloat(metaUrgenteStr) || 0;
+
+  const getCapForLoan = (loan) => {
+    if (customCaps[loan.id] !== undefined) return parseFloat(customCaps[loan.id]) || 0;
+    return loan.cupoDisponible || loan.capital || 600;
+  };
+
+  const getQuotaForLoan = (loan, capVal) => {
+    if (customQuotas[loan.id] !== undefined) return parseFloat(customQuotas[loan.id]) || 0;
+    const porc = loan.porcentajeInteres !== undefined ? loan.porcentajeInteres : 20;
+    const totalConInteres = capVal * (1 + porc / 100);
+    const diasCiclo = loan.cuotaDiaria > 0 && loan.deudaTotal > 0 ? Math.round(loan.deudaTotal / loan.cuotaDiaria) : 24;
+    return Math.round(totalConInteres / (diasCiclo || 24));
+  };
+
+  const handleCapChange = (loan, newCapValue) => {
+    const numCap = parseFloat(newCapValue) || 0;
+    setCustomCaps(prev => ({ ...prev, [loan.id]: newCapValue }));
+    const porc = loan.porcentajeInteres !== undefined ? loan.porcentajeInteres : 20;
+    const totalConInteres = numCap * (1 + porc / 100);
+    const diasCiclo = loan.cuotaDiaria > 0 && loan.deudaTotal > 0 ? Math.round(loan.deudaTotal / loan.cuotaDiaria) : 24;
+    const autoQuota = Math.round(totalConInteres / (diasCiclo || 24));
+    setCustomQuotas(prev => ({ ...prev, [loan.id]: autoQuota.toString() }));
+  };
+
+  const handleSaveNegotiation = async (loan) => {
+    const cap = getCapForLoan(loan);
+    const quota = getQuotaForLoan(loan, cap);
+    await onUpdateCupo(loan.id, cap, quota);
+    setSavedNoticeId(loan.id);
+    setTimeout(() => setSavedNoticeId(null), 2200);
+  };
+
+  const handleExecuteDominoStep = async (loan) => {
+    const cap = getCapForLoan(loan);
+    const quota = getQuotaForLoan(loan, cap);
+    setProcessingId(loan.id);
+    await onRenewLoan(loan, cap, quota, 0);
+    setProcessingId(null);
+  };
+
+  // Clasificación real del círculo de préstamos:
+  // 1) "Ya me prestaron / Nuevo préstamo en curso" -> NO pueden volver a prestarte ahorita (ej. Liliana, Daylan, Gael)
+  // 2) "Disponibles para el Ruleteo" -> Los que están en S/ 0 (Reserva) o les falta poquito para terminar (como Steven) y no están bloqueados
+  const { disponiblesParaRuleteo, bloqueadosYaMePrestaron } = useMemo(() => {
+    const disp = [];
+    const bloq = [];
+
+    loans.forEach(loan => {
+      const saldo = loan.saldoPendiente || 0;
+      if (saldo <= 0 && !loan.yaMePrestoBloqueado) {
+        disp.push(loan);
+      } else if (loan.yaMePrestoBloqueado) {
+        bloq.push(loan);
+      } else {
+        disp.push(loan);
+      }
+    });
+
+    return { disponiblesParaRuleteo: disp, bloqueadosYaMePrestaron: bloq };
+  }, [loans]);
+
+  const prestamistasEnReserva = useMemo(() => {
+    return disponiblesParaRuleteo.filter(l => (l.saldoPendiente || 0) <= 0);
+  }, [disponiblesParaRuleteo]);
+
+  // Cadena Dominó (SOLO usa a los que SÍ están disponibles para ruletear, excluyendo a Liliana/Daylan/Gael que ya prestaron)
+  const planDomino = useMemo(() => {
+    const candidatos = disponiblesParaRuleteo.map(loan => {
+      const saldoParaCero = loan.saldoPendiente || 0;
+      const nuevoPrestamo = getCapForLoan(loan);
+      const nuevaCuota = getQuotaForLoan(loan, nuevoPrestamo);
+      const liquidezNetaLibre = nuevoPrestamo - saldoParaCero;
+      const diasRestantes = loan.cuotaDiaria > 0 ? Math.ceil(saldoParaCero / loan.cuotaDiaria) : 0;
+
+      return {
+        loan,
+        saldoParaCero,
+        nuevoPrestamo,
+        nuevaCuota,
+        liquidezNetaLibre,
+        diasRestantes,
+        yaEnCero: saldoParaCero <= 0
+      };
+    })
+    .filter(item => item.liquidezNetaLibre > 0)
+    .sort((a, b) => {
+      if (a.yaEnCero && !b.yaEnCero) return -1;
+      if (!a.yaEnCero && b.yaEnCero) return 1;
+      if (a.saldoParaCero !== b.saldoParaCero) return a.saldoParaCero - b.saldoParaCero;
+      return b.nuevoPrestamo - a.nuevoPrestamo;
+    });
+
+    let acumuladoLibre = 0;
+    const pasosSeleccionados = [];
+
+    for (const item of candidatos) {
+      const alcanzaMetaAntes = acumuladoLibre >= metaUrgente && metaUrgente > 0;
+      acumuladoLibre += item.liquidezNetaLibre;
+
+      pasosSeleccionados.push({
+        ...item,
+        acumuladoHastaAqui: acumuladoLibre,
+        esNecesarioParaMeta: !alcanzaMetaAntes
+      });
+    }
+
+    const pasosNecesarios = pasosSeleccionados.filter(p => p.esNecesarioParaMeta);
+    const efectivoConseguidoEnMeta = pasosNecesarios.reduce((acc, p) => acc + p.liquidezNetaLibre, 0);
+    const cuotaTotalEnMeta = pasosNecesarios.reduce((acc, p) => acc + p.nuevaCuota, 0);
+    const capitalSemillaInicial = pasosNecesarios.length > 0 ? pasosNecesarios[0].saldoParaCero : 0;
+
+    return {
+      todosLosPasos: pasosSeleccionados,
+      pasosNecesarios,
+      efectivoConseguidoEnMeta,
+      cuotaTotalEnMeta,
+      capitalSemillaInicial
+    };
+  }, [disponiblesParaRuleteo, metaUrgente, customCaps, customQuotas]);
+
+  return (
+    <div className="space-y-5 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8">
+      {/* Cabecera del Plan Urgente */}
+      <div className="bg-gradient-to-br from-cyan-950/60 via-slate-900/90 to-emerald-950/50 border border-cyan-500/40 rounded-[28px] p-5 shadow-[0_0_30px_rgba(6,182,212,0.15)]">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-11 h-11 rounded-2xl bg-cyan-500 text-black flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.6)] shrink-0">
+            <Layers size={22} />
+          </div>
+          <div>
+            <span className="text-[9px] font-black uppercase tracking-widest text-cyan-400 block">
+              Ruleteo Inteligente • Cancelando al Cero
+            </span>
+            <h2 className="text-xl font-black text-white tracking-tight uppercase">
+              Plan de Préstamo Urgente
+            </h2>
+          </div>
+        </div>
+        <p className="text-xs text-slate-300 font-bold leading-relaxed mb-4">
+          Los cobradores que <span className="text-rose-400">ya te prestaron en un nuevo ciclo</span> (ej. Liliana, Daylan, Gael) quedan excluidos automáticamente. Aquí solo entran los que están <span className="text-emerald-400">por terminar (como Steven)</span> o en <span className="text-cyan-400">Reserva (S/ 0)</span>.
+        </p>
+
+        <div className="bg-black/60 border border-white/10 rounded-2xl p-4 space-y-3">
+          <label className="block text-[10px] font-black text-cyan-300 uppercase tracking-widest">
+            ¿Cuánto dinero libre necesitas juntar hoy? (S/)
+          </label>
+          <input
+            type="number"
+            value={metaUrgenteStr}
+            onChange={(e) => setMetaUrgenteStr(e.target.value)}
+            placeholder="Ej. 1500"
+            className="w-full bg-black border-2 border-cyan-500/40 text-white rounded-2xl px-4 py-3 text-2xl font-black outline-none focus:border-cyan-400"
+          />
+          <div className="grid grid-cols-4 gap-2">
+            {[1000, 1500, 2000, 3000].map(val => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setMetaUrgenteStr(val.toString())}
+                className={`py-2 rounded-xl text-[11px] font-black uppercase border transition-all ${
+                  Number(metaUrgenteStr) === val
+                    ? 'bg-cyan-400 text-black border-cyan-300'
+                    : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                }`}
+              >
+                S/ {val}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {planDomino.pasosNecesarios.length > 0 && (
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div className="bg-black/60 p-3 rounded-2xl border border-amber-500/30">
+              <span className="text-[9px] font-black text-amber-300 uppercase block">1er Paso (Semilla)</span>
+              <span className="text-sm font-black text-white mt-0.5 block">
+                S/ {planDomino.capitalSemillaInicial.toFixed(0)}
+              </span>
+              <span className="text-[8px] text-slate-400 font-bold">Para iniciar cadena</span>
+            </div>
+            <div className="bg-emerald-950/40 p-3 rounded-2xl border border-emerald-500/40">
+              <span className="text-[9px] font-black text-emerald-300 uppercase block">Plata Libre Neta</span>
+              <span className="text-base font-black text-emerald-400 mt-0.5 block">
+                +S/ {planDomino.efectivoConseguidoEnMeta.toFixed(0)}
+              </span>
+              <span className="text-[8px] text-emerald-200/70 font-bold">
+                En {planDomino.pasosNecesarios.length} cobrador(es)
+              </span>
+            </div>
+            <div className="bg-cyan-950/40 p-3 rounded-2xl border border-cyan-500/40">
+              <span className="text-[9px] font-black text-cyan-300 uppercase block">Nueva Cuota</span>
+              <span className="text-sm font-black text-cyan-300 mt-0.5 block">
+                S/ {planDomino.cuotaTotalEnMeta.toFixed(0)} /día
+              </span>
+              <span className="text-[8px] text-slate-400 font-bold">De los renovados</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* SECCIÓN 1: COBRADORES DISPONIBLES EN RESERVA (CANCELADOS AL CERO) */}
+      <div className="bg-slate-900/90 border border-emerald-500/30 rounded-[28px] p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles size={18} className="text-emerald-400" />
+            <h3 className="text-xs font-black uppercase tracking-widest text-emerald-300">
+              En Reserva • Cancelados al Cero ({prestamistasEnReserva.length})
+            </h3>
+          </div>
+          <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full uppercase">
+            Listos para prestar
+          </span>
+        </div>
+
+        {prestamistasEnReserva.length === 0 ? (
+          <div className="p-4 rounded-2xl bg-black/50 border border-white/5 text-center">
+            <p className="text-xs font-bold text-slate-400">
+              Cuando termines de pagarle a un cobrador (ej. Steven), quedará aquí en S/ 0 dispuesto a prestarte nuevamente.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {prestamistasEnReserva.map(loan => {
+              const capVal = getCapForLoan(loan);
+              const quotaVal = getQuotaForLoan(loan, capVal);
+              const isSaved = savedNoticeId === loan.id;
+
+              return (
+                <div key={loan.id} className="bg-black/70 border border-emerald-500/40 rounded-2xl p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-base font-black text-white">{loan.prestamista}</h4>
+                        <span className="bg-emerald-500 text-black text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
+                          EN CERO • DISPONIBLE
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                        Último monto cancelado: S/ {loan.capital || 600}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[9px] font-black text-emerald-400 uppercase block">Te puede prestar</span>
+                      <span className="text-lg font-black text-white">+S/ {capVal}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-3 space-y-2.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black text-emerald-300 uppercase">
+                        Negociar Subida (S/)
+                      </span>
+                      <div className="flex gap-1">
+                        {[600, 800, 900, 1000].map(preset => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => handleCapChange(loan, preset.toString())}
+                            className={`px-2 py-0.5 rounded-lg text-[9px] font-black border transition-all ${
+                              Number(capVal) === preset
+                                ? 'bg-emerald-400 text-black border-emerald-300'
+                                : 'bg-black/60 text-slate-300 border-white/10'
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Nuevo Capital (S/)</label>
+                        <input
+                          type="number"
+                          value={customCaps[loan.id] !== undefined ? customCaps[loan.id] : capVal}
+                          onChange={(e) => handleCapChange(loan, e.target.value)}
+                          className="w-full bg-black border border-emerald-500/40 text-emerald-300 rounded-xl px-3 py-2 text-sm font-black outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Nueva Cuota (S/)</label>
+                        <input
+                          type="number"
+                          value={customQuotas[loan.id] !== undefined ? customQuotas[loan.id] : quotaVal}
+                          onChange={(e) => setCustomQuotas(prev => ({ ...prev, [loan.id]: e.target.value }))}
+                          className="w-full bg-black border border-cyan-500/40 text-cyan-300 rounded-xl px-3 py-2 text-sm font-black outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveNegotiation(loan)}
+                      className="px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[10px] font-black uppercase hover:bg-white/10 flex items-center gap-1"
+                    >
+                      {isSaved ? <Check size={13} className="text-emerald-400" /> : <Save size={13} />}
+                      <span>{isSaved ? 'Guardado' : 'Guardar Cupo'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={processingId === loan.id}
+                      onClick={() => handleExecuteDominoStep(loan)}
+                      className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all"
+                    >
+                      <RefreshCw size={14} className={processingId === loan.id ? 'animate-spin' : ''} />
+                      <span>Iniciar Nuevo Préstamo S/ {capVal}</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* SECCIÓN 2: CADENA DOMINÓ (SOLO COBRADORES HABILITADOS PARA RULETEAR) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-xs font-black uppercase tracking-widest text-cyan-400 flex items-center gap-1.5">
+            <Flame size={15} />
+            <span>Cadena de Ruleteo Activa ({planDomino.todosLosPasos.length})</span>
+          </h3>
+          <span className="text-[10px] font-bold text-slate-400">
+            Uno paga la cuenta del otro
+          </span>
+        </div>
+
+        {planDomino.todosLosPasos.length === 0 ? (
+          <div className="p-6 rounded-3xl bg-white/5 border border-white/10 text-center space-y-2">
+            <p className="text-xs text-slate-300 font-bold">
+              No hay cobradores habilitados para ruletear en este momento.
+            </p>
+            <p className="text-[11px] text-slate-500">
+              Si un cobrador de abajo (ej. Steven) ya está por terminar y quieres incluirlo en el ruleteo, toca <span className="text-cyan-400 font-bold">&quot;Habilitar para Ruleteo&quot;</span> en la lista inferior.
+            </p>
+          </div>
+        ) : (
+          planDomino.todosLosPasos.map((paso, index) => {
+            const { loan, saldoParaCero, nuevoPrestamo, nuevaCuota, liquidezNetaLibre, diasRestantes, yaEnCero, acumuladoHastaAqui, esNecesarioParaMeta } = paso;
+
+            return (
+              <div
+                key={loan.id}
+                className={`rounded-[26px] p-4 border transition-all space-y-3 ${
+                  esNecesarioParaMeta
+                    ? 'bg-gradient-to-br from-slate-900/95 via-slate-900 to-cyan-950/30 border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.12)]'
+                    : 'bg-slate-900/40 border-white/10 opacity-75'
+                }`}
+              >
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center shrink-0 ${
+                      esNecesarioParaMeta ? 'bg-cyan-400 text-black' : 'bg-white/10 text-slate-400'
+                    }`}>
+                      #{index + 1}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-base font-black text-white">{loan.prestamista}</h4>
+                        {yaEnCero ? (
+                          <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
+                            EN CERO (RESERVA)
+                          </span>
+                        ) : (
+                          <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
+                            FALTAN {diasRestantes} DÍA(S) • S/ {saldoParaCero.toFixed(0)}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                        {yaEnCero
+                          ? `Te presta S/ ${nuevoPrestamo} limpios`
+                          : `Cancelas S/ ${saldoParaCero.toFixed(0)} al cero → Te vuelve a prestar S/ ${nuevoPrestamo}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase block">Te Queda Libre</span>
+                    <span className="text-lg font-black text-emerald-400">+S/ {liquidezNetaLibre.toFixed(0)}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 bg-black/60 p-2.5 rounded-2xl border border-white/5 text-center">
+                  <div>
+                    <span className="text-[8px] font-bold text-rose-400 uppercase block">Pagar para Cero</span>
+                    <span className="text-xs font-black text-white">S/ {saldoParaCero.toFixed(0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-bold text-cyan-400 uppercase block">Nuevo Préstamo</span>
+                    <span className="text-xs font-black text-cyan-300">S/ {nuevoPrestamo.toFixed(0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[8px] font-bold text-emerald-400 uppercase block">Juntado Hasta Aquí</span>
+                    <span className="text-xs font-black text-emerald-400">S/ {acumuladoHastaAqui.toFixed(0)}</span>
+                  </div>
+                </div>
+
+                {/* Negociador de subida de cupo (de 600 a 800, 900, 1000) */}
+                <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-3 space-y-2">
+                  <div className="flex justify-between items-center flex-wrap gap-1">
+                    <span className="text-[9px] font-black text-slate-300 uppercase">
+                      Subir préstamo si negocias:
+                    </span>
+                    <div className="flex gap-1">
+                      {[600, 800, 900, 1000].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => handleCapChange(loan, val.toString())}
+                          className={`px-2 py-0.5 rounded-lg text-[9px] font-black border transition-all ${
+                            Number(nuevoPrestamo) === val
+                              ? 'bg-cyan-400 text-black border-cyan-300'
+                              : 'bg-black/60 text-slate-400 border-white/10'
+                          }`}
+                        >
+                          S/{val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[8px] font-bold text-slate-400 uppercase mb-0.5">Préstamo Nuevo (S/)</label>
+                      <input
+                        type="number"
+                        value={customCaps[loan.id] !== undefined ? customCaps[loan.id] : nuevoPrestamo}
+                        onChange={(e) => handleCapChange(loan, e.target.value)}
+                        className="w-full bg-black/80 border border-white/15 text-white rounded-xl px-3 py-1.5 text-xs font-black outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[8px] font-bold text-slate-400 uppercase mb-0.5">Nueva Cuota (S/)</label>
+                      <input
+                        type="number"
+                        value={customQuotas[loan.id] !== undefined ? customQuotas[loan.id] : nuevaCuota}
+                        onChange={(e) => setCustomQuotas(prev => ({ ...prev, [loan.id]: e.target.value }))}
+                        className="w-full bg-black/80 border border-white/15 text-cyan-300 rounded-xl px-3 py-1.5 text-xs font-black outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => onToggleYaMePresto(loan.id, true)}
+                    className="px-2.5 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-[9px] font-black uppercase hover:bg-rose-500/20 flex items-center gap-1"
+                    title="Marcar que ya te prestó para sacarlo del ruleteo"
+                  >
+                    <Ban size={12} />
+                    <span>Ya me prestó</span>
+                  </button>
+
+                  {!yaEnCero && (
+                    <button
+                      type="button"
+                      onClick={() => onPayToZero(loan)}
+                      className="flex-1 bg-amber-400 hover:bg-amber-300 text-black font-black py-2.5 px-3 rounded-xl text-[10px] uppercase tracking-wider flex items-center justify-center gap-1"
+                    >
+                      <Wallet size={13} />
+                      <span>1. Cancelar S/ {saldoParaCero.toFixed(0)}</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={processingId === loan.id}
+                    onClick={() => handleExecuteDominoStep(loan)}
+                    className="flex-1 bg-gradient-to-r from-emerald-500 to-cyan-400 text-black font-black py-2.5 px-3 rounded-xl text-[10px] uppercase tracking-wider flex items-center justify-center gap-1"
+                  >
+                    <RefreshCw size={13} className={processingId === loan.id ? 'animate-spin' : ''} />
+                    <span>{yaEnCero ? `Activar S/ ${nuevoPrestamo}` : `2. Nuevo S/ ${nuevoPrestamo}`}</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* SECCIÓN 3: BLOQUEADOS PORQUE "YA ME PRESTARON / ESTÁN EN NUEVO PRÉSTAMO" (Ej. Liliana, Daylan, Gael) */}
+      <div className="bg-slate-900/60 border border-rose-500/25 rounded-[26px] p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Ban size={16} className="text-rose-400" />
+            <h4 className="text-xs font-black uppercase tracking-wider text-rose-300">
+              Ya me prestaron • En Nuevo Préstamo ({bloqueadosYaMePrestaron.length})
+            </h4>
+          </div>
+          <span className="text-[9px] font-bold text-slate-400">No entran al ruleteo hoy</span>
+        </div>
+        <p className="text-[11px] text-slate-400 font-bold">
+          Estos prestamistas ya te dieron un nuevo préstamo actual y lo estás pagando. Cuando a uno le falten pocos días para terminar, puedes tocar <span className="text-cyan-400">&quot;Habilitar Ruleteo&quot;</span>.
+        </p>
+
+        {bloqueadosYaMePrestaron.length === 0 ? (
+          <p className="text-[11px] text-slate-500 italic text-center py-2">
+            Ningún cobrador está marcado como bloqueado. Usa el botón &quot;Ya me prestó&quot; en cualquiera que ya esté en un nuevo préstamo.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {bloqueadosYaMePrestaron.map(loan => {
+              const diasRest = loan.cuotaDiaria > 0 ? Math.ceil((loan.saldoPendiente || 0) / loan.cuotaDiaria) : 0;
+              return (
+                <div key={loan.id} className="bg-black/60 border border-white/10 rounded-2xl p-3 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-white">{loan.prestamista}</span>
+                      <span className="bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[8px] font-black px-2 py-0.5 rounded-full uppercase">
+                        YA ME PRESTÓ (EN CURSO)
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                      Resta: S/ {loan.saldoPendiente} ({diasRest} cuotas de S/ {loan.cuotaDiaria})
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onToggleYaMePresto(loan.id, false)}
+                    className="px-3 py-2 rounded-xl bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-[9px] font-black uppercase hover:bg-cyan-500/25"
+                  >
+                    Habilitar Ruleteo
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// RADAR DE ALERTA ANTICIPADA (3 A 5 DÍAS ANTES PARA PAGO ÚNICO / FECHA FIJA)
+// ==========================================
+function FixedLoansAlertRadar({ loans, onPayWithAmount }) {
+  const [copiedId, setCopiedId] = useState(null);
+
+  const alertasFijas = useMemo(() => {
+    return loans
+      .filter(l => l.modalidad === 'FIJO' && (l.saldoPendiente || 0) > 0)
+      .map(loan => {
+        const diasRestantes = getDaysUntilDue(loan.fechaVencimiento);
+        const umbral = loan.diasAlerta || 5;
+        return { loan, diasRestantes, umbral };
+      })
+      .filter(item => item.diasRestantes <= item.umbral)
+      .sort((a, b) => a.diasRestantes - b.diasRestantes);
+  }, [loans]);
+
+  if (alertasFijas.length === 0) return null;
+
+  const handleCopyYape = (loan) => {
+    if (!loan.yape) return;
+    copyTextSafe(loan.yape);
+    setCopiedId(loan.id);
+    setTimeout(() => setCopiedId(null), 2500);
+  };
+
+  return (
+    <div className="bg-gradient-to-br from-amber-950/70 via-rose-950/50 to-slate-950 border-2 border-amber-500/60 rounded-[28px] p-4 shadow-[0_0_30px_rgba(245,158,11,0.25)] space-y-3 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-2xl bg-amber-500 text-black flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.7)] animate-bounce">
+            <BellRing size={18} />
+          </div>
+          <div>
+            <h3 className="text-xs font-black uppercase tracking-widest text-amber-300">
+              Radar de Pago Único • Alerta Anticipada
+            </h3>
+            <p className="text-[10px] text-amber-200/80 font-bold">
+              Prepárate: Tienes {alertasFijas.length} pago(s) fuerte(s) por vencer pronto
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        {alertasFijas.map(({ loan, diasRestantes }) => {
+          const isOverdue = diasRestantes < 0;
+          const isToday = diasRestantes === 0;
+          const ahorroPorDia = diasRestantes > 0 ? (loan.saldoPendiente / diasRestantes) : loan.saldoPendiente;
+          const isCopied = copiedId === loan.id;
+
+          return (
+            <div key={loan.id} className="bg-black/70 border border-amber-500/40 rounded-2xl p-3.5 flex flex-col gap-2.5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-base font-black text-white">{loan.prestamista}</span>
+                    <span className={`text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase ${
+                      isOverdue
+                        ? 'bg-rose-500 text-black animate-pulse'
+                        : isToday
+                        ? 'bg-amber-400 text-black animate-pulse'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-400/50'
+                    }`}>
+                      {isOverdue
+                        ? `¡VENCIDO HACE ${Math.abs(diasRestantes)} DÍA(S)!`
+                        : isToday
+                        ? '¡SE PAGA HOY MISMO!'
+                        : `¡FALTAN ${diasRestantes} DÍA(S)!`}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 font-bold mt-1">
+                    Fecha exacta de pago: <span className="text-amber-300">{formatDate(loan.fechaVencimiento)}</span>
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase block">Monto a Juntar</span>
+                  <span className="text-lg font-black text-rose-400">S/ {Number(loan.saldoPendiente).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-amber-200">
+                  {diasRestantes > 0
+                    ? `💡 Meta para llegar listo: Junta S/ ${ahorroPorDia.toFixed(2)} por día`
+                    : `⚠️ Debes liquidar S/ ${Number(loan.saldoPendiente).toFixed(2)} hoy`}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                {loan.yape && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopyYape(loan)}
+                    className={`px-3 py-2 rounded-xl text-[10px] font-black flex items-center gap-1.5 border transition-all ${
+                      isCopied
+                        ? 'bg-fuchsia-500 text-black border-fuchsia-400'
+                        : 'bg-[#742284]/30 text-[#e899fb] border-[#742284]/60 hover:bg-[#742284]/50'
+                    }`}
+                  >
+                    {isCopied ? <Check size={12} /> : <Copy size={12} />}
+                    <span>{isCopied ? '¡Yape Copiado!' : `Yape: ${loan.yape}`}</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => onPayWithAmount(loan, loan.saldoPendiente)}
+                  className="bg-amber-400 hover:bg-amber-300 text-black font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-[0_0_15px_rgba(251,191,36,0.4)] transition-all"
+                >
+                  <Wallet size={13} />
+                  <span>Abonar / Liquidar</span>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// MÓDULO CAJA DEL DÍA (CON AUTO-COPIADO DE YAPE AL INSTANTE)
 // ==========================================
 function DailyCashBox({ loans, stats, onPayWithAmount }) {
   const [isOpen, setIsOpen] = useState(false);
   const [presupuestoStr, setPresupuestoStr] = useState('');
+  const [copiedId, setCopiedId] = useState(null);
 
-  const activeLoans = loans.filter(l => (l.saldoPendiente || 0) > 0);
+  const activeDailyLoans = loans.filter(l => (l.saldoPendiente || 0) > 0 && l.modalidad !== 'FIJO');
   const todayStr = getLocalTodayString();
 
-  // Préstamos que aún requieren pago hoy
   const pendientesHoy = useMemo(() => {
-    return activeLoans
+    return activeDailyLoans
       .filter(l => !(l.lastManualPaymentDate === todayStr && (l.manualPaymentsCount || 0) >= 1))
       .sort((a, b) => {
-        // Prioridad 1: Mayor mora respecto a su cuota
         const moraA = (a.montoExigible || 0) - (a.cuotaDiaria || 0);
         const moraB = (b.montoExigible || 0) - (b.cuotaDiaria || 0);
         if (moraB !== moraA) return moraB - moraA;
-        // Prioridad 2: Mayor monto exigible
         return (b.montoExigible || 0) - (a.montoExigible || 0);
       });
-  }, [activeLoans, todayStr]);
+  }, [activeDailyLoans, todayStr]);
 
   const totalCuotasPendientesHoy = pendientesHoy.reduce((acc, l) => acc + Math.min(l.cuotaDiaria || 0, l.saldoPendiente || 0), 0);
   const totalExigiblePendienteHoy = pendientesHoy.reduce((acc, l) => acc + ((l.montoExigible || 0) > 0 ? l.montoExigible : Math.min(l.cuotaDiaria || 0, l.saldoPendiente || 0)), 0);
 
   const presupuesto = parseFloat(presupuestoStr) || 0;
 
-  // Algoritmo de distribución inteligente
   const planDistribucion = useMemo(() => {
     if (presupuesto <= 0) return { asignaciones: [], sobrante: 0 };
     let disponible = presupuesto;
     const asignaciones = [];
 
-    // Paso 1: Cubrir al menos la cuota del día en orden de prioridad
     for (const loan of pendientesHoy) {
       if (disponible <= 0) {
         asignaciones.push({ loan, montoAsignado: 0, estado: 'SIN_CAJA' });
@@ -766,7 +1717,6 @@ function DailyCashBox({ loans, stats, onPayWithAmount }) {
       });
     }
 
-    // Paso 2: Si sobra dinero y alguien tiene mora atrasada extra, cubrir su mora
     if (disponible > 0) {
       for (let item of asignaciones) {
         if (disponible <= 0) break;
@@ -775,7 +1725,7 @@ function DailyCashBox({ loans, stats, onPayWithAmount }) {
           const extra = Math.min(disponible, exigibleExtra, item.loan.saldoPendiente - item.montoAsignado);
           item.montoAsignado += extra;
           disponible -= extra;
-          if ( extra > 0 ) item.estado = 'CUBRE_MORA';
+          if (extra > 0) item.estado = 'CUBRE_MORA';
         }
       }
     }
@@ -783,7 +1733,14 @@ function DailyCashBox({ loans, stats, onPayWithAmount }) {
     return { asignaciones, sobrante: disponible };
   }, [presupuesto, pendientesHoy]);
 
-  if (activeLoans.length === 0) return null;
+  const handleCopyYapeInBox = (loan) => {
+    if (!loan.yape) return;
+    copyTextSafe(loan.yape);
+    setCopiedId(loan.id);
+    setTimeout(() => setCopiedId(null), 2500);
+  };
+
+  if (activeDailyLoans.length === 0) return null;
 
   return (
     <div className="bg-gradient-to-br from-slate-900/95 via-slate-900/80 to-emerald-950/30 border border-emerald-500/30 rounded-[28px] p-4 shadow-[0_0_25px_rgba(16,185,129,0.12)] transition-all">
@@ -792,12 +1749,12 @@ function DailyCashBox({ loans, stats, onPayWithAmount }) {
         className="flex items-center justify-between cursor-pointer select-none"
       >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.25)]">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
             <Calculator size={20} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-xs font-black uppercase tracking-widest text-white">Caja del Día</h3>
+              <h3 className="text-xs font-black uppercase tracking-widest text-white">Caja del Día (Diarios)</h3>
               <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
                 {pendientesHoy.length} por pagar hoy
               </span>
@@ -823,7 +1780,7 @@ function DailyCashBox({ loans, stats, onPayWithAmount }) {
                 type="number"
                 value={presupuestoStr}
                 onChange={(e) => setPresupuestoStr(e.target.value)}
-                placeholder="Ej. 50"
+                placeholder="Ej. 100"
                 className="flex-1 bg-black/70 border border-emerald-500/40 text-white rounded-2xl px-4 py-3 text-lg font-black outline-none focus:border-emerald-400"
               />
               <button
@@ -838,12 +1795,12 @@ function DailyCashBox({ loans, stats, onPayWithAmount }) {
 
           {pendientesHoy.length === 0 ? (
             <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl text-center">
-              <p className="text-xs font-black text-emerald-400 uppercase tracking-wider">¡Todos los cobradores de hoy ya fueron pagados!</p>
+              <p className="text-xs font-black text-emerald-400 uppercase tracking-wider">¡Todos los cobradores diarios de hoy ya fueron pagados!</p>
             </div>
           ) : presupuesto > 0 ? (
             <div className="space-y-2.5">
               <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest px-1">
-                <span className="text-slate-400">Ruta Sugerida por Prioridad:</span>
+                <span className="text-slate-400">Ruta Sugerida (Al pagar copia Yape):</span>
                 {planDistribucion.sobrante > 0 ? (
                   <span className="text-cyan-400">Te sobran: S/ {planDistribucion.sobrante.toFixed(2)}</span>
                 ) : presupuesto < totalCuotasPendientesHoy ? (
@@ -853,44 +1810,66 @@ function DailyCashBox({ loans, stats, onPayWithAmount }) {
                 )}
               </div>
 
-              {planDistribucion.asignaciones.map(({ loan, montoAsignado, estado }) => (
-                <div key={loan.id} className="bg-black/60 border border-white/10 p-3 rounded-2xl flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-white text-sm">{loan.prestamista}</span>
-                      <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${
-                        estado === 'CUBRE_MORA' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' :
-                        estado === 'CUOTA_COMPLETA' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
-                        estado === 'PAGO_PARCIAL' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
-                        'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                      }`}>
-                        {estado === 'CUBRE_MORA' ? 'Cuota + Mora' :
-                         estado === 'CUOTA_COMPLETA' ? 'Cuota Completa' :
-                         estado === 'PAGO_PARCIAL' ? 'Abono Parcial' : 'Sin Saldo'}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">
-                      Cuota: S/ {loan.cuotaDiaria} • Exigible: S/ {(loan.montoExigible || 0).toFixed(2)}
-                    </p>
-                  </div>
+              {planDistribucion.asignaciones.map(({ loan, montoAsignado, estado }) => {
+                const isYapeCopied = copiedId === loan.id;
+                return (
+                  <div key={loan.id} className="bg-black/60 border border-white/10 p-3 rounded-2xl flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-black text-white text-sm">{loan.prestamista}</span>
+                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${
+                            estado === 'CUBRE_MORA' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' :
+                            estado === 'CUOTA_COMPLETA' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
+                            estado === 'PAGO_PARCIAL' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                            'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                          }`}>
+                            {estado === 'CUBRE_MORA' ? 'Cuota + Mora' :
+                             estado === 'CUOTA_COMPLETA' ? 'Cuota Completa' :
+                             estado === 'PAGO_PARCIAL' ? 'Abono Parcial' : 'Sin Saldo'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                          Cuota: S/ {loan.cuotaDiaria} • Exigible: S/ {(loan.montoExigible || 0).toFixed(2)}
+                        </p>
+                      </div>
 
-                  {montoAsignado > 0 ? (
-                    <button
-                      onClick={() => onPayWithAmount(loan, montoAsignado)}
-                      className="bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.4)] transition-all"
-                    >
-                      <span>Pagar S/ {montoAsignado.toFixed(0)}</span>
-                      <ArrowRight size={13} />
-                    </button>
-                  ) : (
-                    <span className="text-[10px] font-black text-rose-400/70 uppercase px-2">Pendiente</span>
-                  )}
-                </div>
-              ))}
+                      <div className="flex items-center gap-1.5">
+                        {loan.yape && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopyYapeInBox(loan)}
+                            className={`px-2.5 py-2 rounded-xl text-[10px] font-black flex items-center gap-1 border transition-all ${
+                              isYapeCopied
+                                ? 'bg-fuchsia-500 text-black border-fuchsia-400'
+                                : 'bg-[#742284]/30 text-[#e899fb] border-[#742284]/60 hover:bg-[#742284]/50'
+                            }`}
+                          >
+                            {isYapeCopied ? <Check size={12} /> : <Copy size={12} />}
+                            <span>{isYapeCopied ? '¡Yape Copiado!' : loan.yape}</span>
+                          </button>
+                        )}
+
+                        {montoAsignado > 0 ? (
+                          <button
+                            onClick={() => onPayWithAmount(loan, montoAsignado)}
+                            className="bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs px-3 py-2 rounded-xl flex items-center gap-1 transition-all"
+                          >
+                            <span>Pagar S/ {montoAsignado.toFixed(0)}</span>
+                            <ArrowRight size={13} />
+                          </button>
+                        ) : (
+                          <span className="text-[10px] font-black text-rose-400/70 uppercase px-2">Pendiente</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <p className="text-[11px] text-slate-400 text-center italic">
-              Escribe arriba cuánto efectivo o saldo Yape tienes hoy para armar tu ruta automática.
+              Escribe arriba cuánto dinero tienes hoy (ej. 100) para repartir y copiar el Yape con un toque.
             </p>
           )}
         </div>
@@ -899,28 +1878,184 @@ function DailyCashBox({ loans, stats, onPayWithAmount }) {
   );
 }
 
-// --- Componentes Secundarios ---
+// ==========================================
+// PANEL PRINCIPAL CON ORGANIZACIÓN INTELIGENTE Y MARCADOR DE NUEVO CICLO
+// ==========================================
+function DashboardTab({ loans, stats, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMePresto, onGoToDomino }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState('ACTIVOS');
+  const [sortBy, setSortBy] = useState('URGENCIA');
 
-function DashboardTab({ loans, stats, onPayRequest, onEdit, onDelete }) {
   const activeLoans = loans.filter(l => (l.saldoPendiente || 0) > 0);
-  
+  const reserveLoans = loans.filter(l => (l.saldoPendiente || 0) <= 0);
+  const nearFinishLoans = activeLoans.filter(l => {
+    if (l.modalidad === 'FIJO') return getDaysUntilDue(l.fechaVencimiento) <= 5;
+    const diasRest = l.cuotaDiaria > 0 ? Math.ceil(l.saldoPendiente / l.cuotaDiaria) : 99;
+    return diasRest <= 5;
+  });
+  const fixedActiveLoans = activeLoans.filter(l => l.modalidad === 'FIJO');
+
+  const filteredAndSortedLoans = useMemo(() => {
+    let baseList = [];
+    if (filterCategory === 'ACTIVOS') baseList = activeLoans;
+    else if (filterCategory === 'POR_TERMINAR') baseList = nearFinishLoans;
+    else if (filterCategory === 'RESERVA') baseList = reserveLoans;
+    else if (filterCategory === 'FIJOS') baseList = fixedActiveLoans;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      baseList = baseList.filter(l => (l.prestamista || '').toLowerCase().includes(q));
+    }
+
+    return [...baseList].sort((a, b) => {
+      if (sortBy === 'CERCA_CERO') {
+        return (a.saldoPendiente || 0) - (b.saldoPendiente || 0);
+      }
+      if (sortBy === 'CUOTA') {
+        return (b.cuotaDiaria || 0) - (a.cuotaDiaria || 0);
+      }
+      if (sortBy === 'NOMBRE') {
+        return (a.prestamista || '').localeCompare(b.prestamista || '');
+      }
+      return (b.montoExigible || 0) - (a.montoExigible || 0);
+    });
+  }, [loans, filterCategory, searchQuery, sortBy, activeLoans, nearFinishLoans, reserveLoans, fixedActiveLoans]);
+
   return (
-    <div className="space-y-5 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Módulo de Caja del Día */}
+    <div className="space-y-4 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <FixedLoansAlertRadar loans={loans} onPayWithAmount={onPayRequest} />
+
       <DailyCashBox loans={loans} stats={stats} onPayWithAmount={onPayRequest} />
 
-      <div className="flex justify-between items-center px-2 mb-2">
-        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Activos ({activeLoans.length})</h3>
+      {/* Acceso Rápido al Ruleteo / Plan Urgente */}
+      <div
+        onClick={onGoToDomino}
+        className="bg-gradient-to-r from-cyan-950/70 via-slate-900 to-emerald-950/60 border border-cyan-500/40 rounded-[24px] p-3.5 flex items-center justify-between cursor-pointer hover:border-cyan-400 transition-all"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 flex items-center justify-center">
+            <Layers size={18} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-white">Plan Préstamo Urgente (Ruleteo)</span>
+              {nearFinishLoans.length > 0 && (
+                <span className="bg-amber-400 text-black text-[8px] font-black px-2 py-0.5 rounded-full uppercase">
+                  {nearFinishLoans.length} por terminar
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-cyan-300/80 font-bold">
+              Excluye a los que ya te prestaron (Liliana/Daylan/Gael) • Usa solo disponibles
+            </p>
+          </div>
+        </div>
+        <ArrowRight size={16} className="text-cyan-400" />
       </div>
-      <div className="space-y-5">
-        {activeLoans.map(loan => (
-          <LoanCard key={loan.id} loan={loan} onPayRequest={(l) => onPayRequest(l, null)} onEdit={onEdit} onDelete={onDelete} />
+
+      {/* BARRA DE ORGANIZACIÓN Y ORDENAMIENTO */}
+      <div className="bg-slate-900/90 border border-white/10 rounded-[26px] p-3.5 space-y-3">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3.5 top-3 text-slate-500" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar cobrador..."
+              className="w-full bg-black/70 border border-white/10 text-white rounded-xl pl-9 pr-3 py-2 text-xs font-bold outline-none focus:border-cyan-400"
+            />
+          </div>
+
+          <div className="relative">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="bg-black/70 border border-white/10 text-cyan-300 rounded-xl px-3 py-2 text-[10px] font-black uppercase outline-none focus:border-cyan-400 h-full"
+            >
+              <option value="URGENCIA">Orden: Urgencia</option>
+              <option value="CERCA_CERO">Orden: Cerca a Cero</option>
+              <option value="CUOTA">Orden: Mayor Cuota</option>
+              <option value="NOMBRE">Orden: Nombre A-Z</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-1.5">
+          <button
+            type="button"
+            onClick={() => setFilterCategory('ACTIVOS')}
+            className={`py-2 px-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${
+              filterCategory === 'ACTIVOS'
+                ? 'bg-emerald-500 text-black'
+                : 'bg-black/50 text-slate-400 border border-white/5'
+            }`}
+          >
+            Activos ({activeLoans.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterCategory('POR_TERMINAR')}
+            className={`py-2 px-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${
+              filterCategory === 'POR_TERMINAR'
+                ? 'bg-amber-400 text-black'
+                : 'bg-black/50 text-amber-300/80 border border-white/5'
+            }`}
+          >
+            ≤5 Días ({nearFinishLoans.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterCategory('FIJOS')}
+            className={`py-2 px-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${
+              filterCategory === 'FIJOS'
+                ? 'bg-purple-500 text-black'
+                : 'bg-black/50 text-purple-300/80 border border-white/5'
+            }`}
+          >
+            Fijos ({fixedActiveLoans.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterCategory('RESERVA')}
+            className={`py-2 px-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${
+              filterCategory === 'RESERVA'
+                ? 'bg-cyan-400 text-black'
+                : 'bg-black/50 text-cyan-300/80 border border-white/5'
+            }`}
+          >
+            Reserva ({reserveLoans.length})
+          </button>
+        </div>
+      </div>
+
+      {/* Lista de Tarjetas */}
+      <div className="space-y-4">
+        {filteredAndSortedLoans.map(loan => (
+          <LoanCard
+            key={loan.id}
+            loan={loan}
+            onPayRequest={(l, amt = null) => onPayRequest(l, amt)}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onRenew={onRenew}
+            onToggleYaMePresto={onToggleYaMePresto}
+          />
         ))}
-        {activeLoans.length === 0 && (
-          <div className="text-center p-10 bg-white/5 backdrop-blur-md rounded-3xl border border-white/10 shadow-[0_0_30px_rgba(52,211,153,0.1)]">
-            <CheckCircle className="mx-auto text-emerald-400 mb-4 drop-shadow-[0_0_15px_rgba(52,211,153,0.8)]" size={48} />
-            <p className="text-white font-bold text-lg mb-1 tracking-wide">¡Base de Datos Limpia!</p>
-            <p className="text-slate-500 text-sm">Registra tu primer préstamo en la pestaña NUEVO.</p>
+
+        {filteredAndSortedLoans.length === 0 && (
+          <div className="text-center p-8 bg-white/5 backdrop-blur-md rounded-3xl border border-white/10">
+            <CheckCircle className="mx-auto text-emerald-400 mb-3" size={38} />
+            <p className="text-white font-bold text-sm mb-1">
+              {filterCategory === 'RESERVA'
+                ? 'Aún no tienes prestamistas cancelados en Reserva'
+                : filterCategory === 'POR_TERMINAR'
+                ? 'Ningún préstamo está a 5 días o menos de terminar'
+                : 'No hay préstamos en esta vista'}
+            </p>
+            <p className="text-slate-500 text-xs">
+              Usa las pestañas de arriba o registra un contrato en NUEVO.
+            </p>
           </div>
         )}
       </div>
@@ -928,8 +2063,9 @@ function DashboardTab({ loans, stats, onPayRequest, onEdit, onDelete }) {
   );
 }
 
-function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
+function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMePresto }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isRenewing, setIsRenewing] = useState(false);
   const [copied, setCopied] = useState(false);
   
   const [editPrestamista, setEditPrestamista] = useState(loan.prestamista || '');
@@ -940,40 +2076,86 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
   const [editExigible, setEditExigible] = useState((loan.montoExigible || 0).toString());
   const initialDateStr = loan.fechaInicio ? loan.fechaInicio.split('T')[0] : getLocalTodayString();
   const [editFechaInicio, setEditFechaInicio] = useState(initialDateStr);
+  const [editModalidad, setEditModalidad] = useState(loan.modalidad || 'DIARIO');
+  const [editFechaVencimiento, setEditFechaVencimiento] = useState(loan.fechaVencimiento || addDaysToDateStr(getLocalTodayString(), 15));
+  const [editDiasAlerta, setEditDiasAlerta] = useState(loan.diasAlerta || 5);
+  const [editCupo, setEditCupo] = useState((loan.cupoDisponible || loan.capital || 600).toString());
+  const [limpiarHistorialViejoCheck, setLimpiarHistorialViejoCheck] = useState(true);
+  const [editYaMePresto, setEditYaMePresto] = useState(Boolean(loan.yaMePrestoBloqueado));
+
+  const baseCap = loan.cupoDisponible || loan.capital || 600;
+  const [renewCap, setRenewCap] = useState(baseCap.toString());
+  const [renewQuota, setRenewQuota] = useState((loan.cuotaDiaria || Math.round((baseCap * 1.2) / 24)).toString());
+  const [renewCuotasPagadas, setRenewCuotasPagadas] = useState('0');
+
+  const esEnReserva = (loan.saldoPendiente || 0) <= 0;
+  const esFijo = loan.modalidad === 'FIJO';
+  const diasParaVencer = esFijo ? getDaysUntilDue(loan.fechaVencimiento) : 999;
+  const umbralAlerta = loan.diasAlerta || 5;
+  const enVentanaAlerta = !esEnReserva && esFijo && diasParaVencer <= umbralAlerta;
 
   const cuotaSegura = loan.cuotaDiaria > 0 ? loan.cuotaDiaria : 1;
-  const cuotasRestantes = Math.ceil((loan.saldoPendiente || 0) / cuotaSegura);
-  const fechaFin = getEndDate(loan.fechaInicio, cuotasRestantes);
+  const cuotasRestantes = esFijo ? Math.max(0, diasParaVencer) : Math.ceil((loan.saldoPendiente || 0) / cuotaSegura);
+  const fechaFin = esFijo && loan.fechaVencimiento ? new Date(loan.fechaVencimiento + 'T12:00:00') : getEndDate(loan.fechaInicio, cuotasRestantes);
   
   const deudaOriginal = loan.deudaTotal || 1; 
   const pagado = loan.pagadoAcumulado || 0;
-  const porcentajeProgreso = Math.min(100, Math.max(0, (pagado / deudaOriginal) * 100));
+  const porcentajeProgreso = esEnReserva ? 100 : Math.min(100, Math.max(0, (pagado / deudaOriginal) * 100));
   
   const todayStr = getLocalTodayString();
   const yaPagadoHoy = loan.lastManualPaymentDate === todayStr && (loan.manualPaymentsCount || 0) >= 1;
   const exigible = loan.montoExigible || 0;
+  const estaCercaDeCero = !esEnReserva && !esFijo && cuotasRestantes <= 3;
 
-  let glowColor = "rgba(52,211,153,"; 
   let statusBadge = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
   let statusText = "EN LÍNEA";
   let isDanger = false;
 
-  if (exigible > loan.cuotaDiaria) {
-    glowColor = "rgba(244,63,94,"; 
-    statusBadge = "bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse";
-    statusText = "MORA CRÍTICA";
-    isDanger = true;
-  } else if (exigible > 0) {
-    glowColor = "rgba(251,191,36,"; 
-    statusBadge = "bg-amber-400/10 text-amber-400 border-amber-400/20";
-    statusText = "PENDIENTE";
+  if (esEnReserva) {
+    statusBadge = "bg-cyan-500/20 text-cyan-300 border-cyan-400/40";
+    statusText = `RESERVA • PRESTA S/ ${baseCap}`;
+  } else if (esFijo) {
+    if (diasParaVencer < 0) {
+      statusBadge = "bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse";
+      statusText = `VENCIDO (${Math.abs(diasParaVencer)}D)`;
+      isDanger = true;
+    } else if (diasParaVencer === 0) {
+      statusBadge = "bg-amber-400 text-black border-amber-300 animate-pulse";
+      statusText = "¡VENCE HOY!";
+      isDanger = true;
+    } else if (enVentanaAlerta) {
+      statusBadge = "bg-amber-500/20 text-amber-300 border-amber-400/40 animate-pulse";
+      statusText = `ALERTA: FALTAN ${diasParaVencer}D`;
+    } else {
+      statusBadge = "bg-purple-500/15 text-purple-300 border-purple-500/30";
+      statusText = `FIJO • FALTAN ${diasParaVencer}D`;
+    }
+  } else {
+    if (exigible > loan.cuotaDiaria) {
+      statusBadge = "bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse";
+      statusText = "MORA CRÍTICA";
+      isDanger = true;
+    } else if (estaCercaDeCero) {
+      statusBadge = "bg-cyan-500/20 text-cyan-300 border-cyan-400/40";
+      statusText = `¡A ${cuotasRestantes}D DE CERO!`;
+    } else if (exigible > 0) {
+      statusBadge = "bg-amber-400/10 text-amber-400 border-amber-400/20";
+      statusText = "PENDIENTE";
+    }
   }
 
   const handleCopyYape = () => {
     if (!loan.yape) return;
-    navigator.clipboard.writeText(loan.yape);
+    copyTextSafe(loan.yape);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRenewCapPreset = (val) => {
+    setRenewCap(val.toString());
+    const porc = loan.porcentajeInteres !== undefined ? loan.porcentajeInteres : 20;
+    const total = val * (1 + porc / 100);
+    setRenewQuota(Math.round(total / 24).toString());
   };
 
   const handleWhatsApp = () => {
@@ -997,7 +2179,8 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
         metodoPago: loan.ultimoPagoMetodo || 'DIGITAL',
         nroOperacion: loan.ultimoNroOperacion || '',
         cuotasCubiertas,
-        totalCuotas
+        totalCuotas,
+        modalidad: loan.modalidad || 'DIARIO'
       });
     } else {
       mensajePlano = generarEstadoCuentaAntiSpam({
@@ -1005,7 +2188,9 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
         fechaStr,
         horaStr,
         saldoRestante: loan.saldoPendiente,
-        exigible
+        exigible,
+        modalidad: loan.modalidad || 'DIARIO',
+        fechaVencimiento: loan.fechaVencimiento
       });
     }
     
@@ -1015,59 +2200,179 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
 
   if (isEditing) {
     return (
-      <div className="bg-slate-900/90 backdrop-blur-xl p-5 rounded-[28px] border border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.15)] animate-in fade-in duration-300">
-        <div className="flex justify-between items-center mb-5">
-          <h4 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">AJUSTAR DATOS</h4>
-          <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full transition-colors"><X size={16} /></button>
+      <div className="bg-slate-900/95 backdrop-blur-xl p-5 rounded-[28px] border border-cyan-500/40 animate-in fade-in duration-300 space-y-4">
+        <div className="flex justify-between items-center">
+          <h4 className="text-base font-black text-cyan-400 uppercase">Ajustar / Iniciar Nuevo Ciclo</h4>
+          <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-white bg-white/5 p-2 rounded-full"><X size={16} /></button>
+        </div>
+
+        {/* BOTÓN RÁPIDO: COMENZAR NUEVO PRÉSTAMO DESDE AHORA (BORRA EL PRÉSTAMO ANTERIOR) */}
+        <div className="bg-emerald-950/30 border border-emerald-500/40 rounded-2xl p-3.5 space-y-2.5">
+          <span className="text-[10px] font-black text-emerald-300 uppercase block">
+            🔄 ¿Ya estás en un NUEVO PRÉSTAMO con {loan.prestamista}?
+          </span>
+          <p className="text-[10px] text-slate-300 font-bold">
+            Úsalo para Liliana, Dayra, Gael, etc. Borra sus pagos viejos, inicia su nuevo ciclo limpio y lo marca como &quot;Ya me prestó&quot;.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="block text-[8px] font-bold text-slate-400 uppercase mb-0.5">Capital Nuevo</label>
+              <input
+                type="number"
+                value={renewCap}
+                onChange={(e) => handleRenewCapPreset(parseFloat(e.target.value) || 0)}
+                className="w-full bg-black border border-emerald-500/40 text-white rounded-xl px-2.5 py-1.5 text-xs font-black"
+              />
+            </div>
+            <div>
+              <label className="block text-[8px] font-bold text-slate-400 uppercase mb-0.5">Cuota Diaria</label>
+              <input
+                type="number"
+                value={renewQuota}
+                onChange={(e) => setRenewQuota(e.target.value)}
+                className="w-full bg-black border border-emerald-500/40 text-emerald-300 rounded-xl px-2.5 py-1.5 text-xs font-black"
+              />
+            </div>
+            <div>
+              <label className="block text-[8px] font-bold text-slate-400 uppercase mb-0.5">Días Ya Pagados</label>
+              <input
+                type="number"
+                value={renewCuotasPagadas}
+                onChange={(e) => setRenewCuotasPagadas(e.target.value)}
+                className="w-full bg-black border border-cyan-500/40 text-cyan-300 rounded-xl px-2.5 py-1.5 text-xs font-black"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              await onRenew(loan, renewCap, renewQuota, renewCuotasPagadas);
+              setIsEditing(false);
+            }}
+            className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black py-2.5 rounded-xl text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5"
+          >
+            <RefreshCw size={13} />
+            <span>Comenzar Este Nuevo Préstamo Limpio</span>
+          </button>
         </div>
         
-        <div className="space-y-4 mb-6">
-          <div>
-            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Prestamista</label>
-            <input type="text" value={editPrestamista} onChange={(e) => setEditPrestamista(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+        <div className="space-y-3 pt-2 border-t border-white/10">
+          <div className="grid grid-cols-2 gap-2 bg-black/50 p-1.5 rounded-2xl border border-white/10">
+            <button
+              type="button"
+              onClick={() => setEditModalidad('DIARIO')}
+              className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                editModalidad === 'DIARIO' ? 'bg-emerald-500 text-black' : 'text-slate-400'
+              }`}
+            >
+              Cuota Diaria
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditModalidad('FIJO')}
+              className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                editModalidad === 'FIJO' ? 'bg-purple-500 text-black' : 'text-slate-400'
+              }`}
+            >
+              Pago Único / Fijo
+            </button>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">WhatsApp</label>
-              <input type="tel" value={editWhatsApp} onChange={(e) => setEditWhatsApp(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Prestamista</label>
+              <input type="text" value={editPrestamista} onChange={(e) => setEditPrestamista(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-2.5 text-sm font-bold" />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Yape</label>
-              <input type="tel" value={editYape} onChange={(e) => setEditYape(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+              <label className="block text-[10px] font-bold text-cyan-400 mb-1 uppercase">Capital / Cupo (S/)</label>
+              <input type="number" value={editCupo} onChange={(e) => setEditCupo(e.target.value)} className="w-full bg-black/50 border border-cyan-500/30 text-cyan-300 rounded-2xl px-4 py-2.5 text-sm font-black" />
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
-             <div>
-               <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Deuda Restante</label>
-               <input type="number" value={editSaldo} onChange={(e) => setEditSaldo(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
-             </div>
-             <div>
-               <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Monto Exigible</label>
-               <input type="number" value={editExigible} onChange={(e) => setEditExigible(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
-             </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">WhatsApp</label>
+              <input type="tel" value={editWhatsApp} onChange={(e) => setEditWhatsApp(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-2.5 text-sm font-bold" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Yape</label>
+              <input type="tel" value={editYape} onChange={(e) => setEditYape(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-2.5 text-sm font-bold" />
+            </div>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Cuota Diaria (S/)</label>
-              <input type="number" value={editCuota} onChange={(e) => setEditCuota(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm focus:border-cyan-500 outline-none shadow-inner font-bold" />
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Deuda Restante</label>
+              <input type="number" value={editSaldo} onChange={(e) => setEditSaldo(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-2.5 text-sm font-bold" />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Día de Entrega</label>
-              <input type="date" value={editFechaInicio} onChange={(e) => setEditFechaInicio(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-3 text-[11px] focus:border-cyan-500 outline-none shadow-inner font-bold" />
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Monto Exigible</label>
+              <input type="number" value={editExigible} onChange={(e) => setEditExigible(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-2.5 text-sm font-bold" />
             </div>
+          </div>
+
+          {editModalidad === 'FIJO' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-purple-400 mb-1 uppercase">Fecha Exacta Pago</label>
+                <input type="date" value={editFechaVencimiento} onChange={(e) => setEditFechaVencimiento(e.target.value)} className="w-full bg-black/50 border border-purple-500/40 text-white rounded-2xl px-3 py-2.5 text-[11px] font-bold" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-amber-400 mb-1 uppercase">Avisar Antes</label>
+                <select value={editDiasAlerta} onChange={(e) => setEditDiasAlerta(Number(e.target.value))} className="w-full bg-black/50 border border-amber-500/40 text-white rounded-2xl px-3 py-2.5 text-xs font-bold">
+                  <option value={3}>3 días antes</option>
+                  <option value={5}>5 días antes</option>
+                  <option value={7}>7 días antes</option>
+                </select>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Cuota Diaria (S/)</label>
+                <input type="number" value={editCuota} onChange={(e) => setEditCuota(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-2.5 text-sm font-bold" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Día de Entrega</label>
+                <input type="date" value={editFechaInicio} onChange={(e) => setEditFechaInicio(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-3 py-2.5 text-[11px] font-bold" />
+              </div>
+            </div>
+          )}
+
+          {/* Opciones de Limpieza y Bloqueo de Ruleteo */}
+          <div className="space-y-2 pt-2">
+            <label className="flex items-center gap-2 text-xs font-bold text-rose-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={editYaMePresto}
+                onChange={(e) => setEditYaMePresto(e.target.checked)}
+                className="rounded accent-rose-500 w-4 h-4"
+              />
+              <span>🔒 Ya me prestó (No incluir como disponible en Ruleteo)</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-xs font-bold text-cyan-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={limpiarHistorialViejoCheck}
+                onChange={(e) => setLimpiarHistorialViejoCheck(e.target.checked)}
+                className="rounded accent-cyan-400 w-4 h-4"
+              />
+              <span>🧹 Limpiar pagos del préstamo anterior al guardar</span>
+            </label>
           </div>
         </div>
         
-        <div className="flex gap-3">
-          <button onClick={() => onDelete(loan.id)} className="flex-1 bg-rose-500/10 border border-rose-500/30 text-rose-400 py-3 rounded-2xl text-xs font-bold flex justify-center items-center gap-2 hover:bg-rose-500/20 transition-all shadow-[0_0_15px_rgba(244,63,94,0.1)] hover:shadow-[0_0_20px_rgba(244,63,94,0.4)]">
-            <Trash2 size={16}/> PURGAR
+        <div className="flex gap-3 pt-2">
+          <button onClick={() => onDelete(loan.id)} className="flex-1 bg-rose-500/10 border border-rose-500/30 text-rose-400 py-3 rounded-2xl text-xs font-bold flex justify-center items-center gap-2 hover:bg-rose-500/20">
+            <Trash2 size={16}/> ELIMINAR
           </button>
           <button onClick={() => { 
-              onEdit(loan.id, editPrestamista, editWhatsApp, editYape, editSaldo, editCuota, editExigible, editFechaInicio); 
+              onEdit(loan.id, editPrestamista, editWhatsApp, editYape, editSaldo, editCuota, editExigible, editFechaInicio, editModalidad, editFechaVencimiento, editDiasAlerta, editCupo, limpiarHistorialViejoCheck, editYaMePresto); 
               setIsEditing(false); 
             }} 
-            className="flex-1 bg-cyan-500 text-black py-3 rounded-2xl text-xs font-black flex justify-center items-center gap-2 shadow-[0_0_20px_rgba(6,182,212,0.4)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] transition-all">
-            <Save size={16} /> CONFIRMAR
+            className="flex-1 bg-cyan-500 text-black py-3 rounded-2xl text-xs font-black flex justify-center items-center gap-2">
+            <Save size={16} /> GUARDAR
           </button>
         </div>
       </div>
@@ -1075,114 +2380,262 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete }) {
   }
 
   return (
-    <div className={`relative group p-[1px] rounded-[32px] overflow-hidden transition-all duration-500 shadow-[0_10px_30px_-15px_${glowColor}0.3)] hover:shadow-[0_15px_40px_-10px_${glowColor}0.5)]`}>
-      <div className={`absolute inset-0 bg-gradient-to-br ${isDanger ? 'from-rose-500 via-rose-900 to-black' : 'from-slate-700 via-slate-800 to-black'} group-hover:opacity-100 transition-opacity duration-500`}></div>
+    <div className="relative group p-[1px] rounded-[32px] overflow-hidden transition-all duration-500">
+      <div className={`absolute inset-0 bg-gradient-to-br ${
+        esEnReserva
+          ? 'from-cyan-500 via-emerald-900 to-black'
+          : isDanger
+          ? 'from-rose-500 via-rose-900 to-black'
+          : enVentanaAlerta
+          ? 'from-amber-400 via-amber-900 to-black'
+          : esFijo
+          ? 'from-purple-500 via-slate-800 to-black'
+          : 'from-slate-700 via-slate-800 to-black'
+      }`}></div>
       
       <div className="relative bg-[#0a0a0a]/90 backdrop-blur-2xl p-5 sm:p-6 rounded-[31px] h-full border border-white/5 flex flex-col justify-between">
         
         {/* Cabecera */}
-        <div className="flex justify-between items-start mb-5">
+        <div className="flex justify-between items-start mb-4">
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <h4 className="text-2xl font-black text-white tracking-tight">{loan.prestamista}</h4>
-              <button onClick={() => setIsEditing(true)} className="text-slate-600 hover:text-cyan-400 transition-colors bg-white/5 p-1.5 rounded-full"><Edit2 size={12} /></button>
+              {esFijo && (
+                <span className="bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
+                  PAGO ÚNICO
+                </span>
+              )}
+              {!esEnReserva && (
+                <button
+                  type="button"
+                  onClick={() => onToggleYaMePresto && onToggleYaMePresto(loan.id, !loan.yaMePrestoBloqueado)}
+                  className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase border transition-all ${
+                    loan.yaMePrestoBloqueado
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                      : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                  }`}
+                  title="Toca para cambiar si ya te prestó o si está disponible para ruletear"
+                >
+                  {loan.yaMePrestoBloqueado ? '🔒 Ya me prestó' : '⚡ Ruleteable'}
+                </button>
+              )}
+              <button onClick={() => setIsEditing(true)} className="text-slate-400 hover:text-cyan-400 transition-colors bg-white/5 p-1.5 rounded-full"><Edit2 size={12} /></button>
             </div>
-            <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1.5 font-bold tracking-widest uppercase">
-              <Calendar size={12} className="text-slate-400" /> 
-              <span>Fin aprox: {formatDate(fechaFin.toISOString())}</span>
+            <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5 font-bold tracking-widest uppercase">
+              <Calendar size={12} className={esEnReserva ? 'text-cyan-400' : esFijo ? 'text-purple-400' : 'text-slate-400'} /> 
+              <span>
+                {esEnReserva
+                  ? `Cancelado al Cero • Dispuesto a prestar S/ ${baseCap}`
+                  : esFijo
+                  ? `Día de Pago: ${formatDate(loan.fechaVencimiento)} (Aviso ${umbralAlerta}d antes)`
+                  : `Fin aprox: ${formatDate(fechaFin.toISOString())} • Préstamo: S/ ${baseCap}`}
+              </span>
             </p>
           </div>
-          <div className={`px-3 py-1 rounded-full text-[9px] font-black tracking-widest border flex items-center gap-1.5 shadow-lg ${statusBadge}`}>
-            {isDanger && <ShieldAlert size={10} />}
+          <div className={`px-3 py-1 rounded-full text-[9px] font-black tracking-widest border flex items-center gap-1.5 ${statusBadge}`}>
+            {(isDanger || enVentanaAlerta) && <BellRing size={10} />}
             <span>{statusText}</span>
           </div>
         </div>
 
-        {/* Línea de Tiempo (Progreso) */}
-        <div className="mb-5 bg-black/40 p-3 rounded-2xl border border-white/5">
-          <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-            <span>Pagado: S/ {pagado.toFixed(2)}</span>
-            <span>Total: S/ {deudaOriginal.toFixed(2)}</span>
-          </div>
-          <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden shadow-inner relative">
-            <div 
-              className={`h-full relative transition-all duration-1000 ease-out ${porcentajeProgreso >= 100 ? 'bg-cyan-500' : 'bg-emerald-500'}`} 
-              style={{ width: `${porcentajeProgreso}%` }}>
-              <div className="absolute inset-0 bg-white/20 w-1/2 animate-[pulse_2s_infinite]"></div>
+        {esEnReserva ? (
+          <div className="bg-cyan-950/25 border border-cyan-500/30 rounded-2xl p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-cyan-300 uppercase tracking-wider">
+                Listo para Nuevo Préstamo (Negociable)
+              </span>
+              <div className="flex gap-1">
+                {[600, 800, 900, 1000].map(val => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => handleRenewCapPreset(val)}
+                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black border ${
+                      Number(renewCap) === val ? 'bg-cyan-400 text-black border-cyan-300' : 'bg-black/60 text-slate-300 border-white/10'
+                    }`}
+                  >
+                    {val}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {isRenewing && (
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Capital Nuevo (S/)</label>
+                  <input
+                    type="number"
+                    value={renewCap}
+                    onChange={(e) => handleRenewCapPreset(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-black border border-cyan-500/40 text-white rounded-xl px-3 py-2 text-xs font-black outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Nueva Cuota (S/)</label>
+                  <input
+                    type="number"
+                    value={renewQuota}
+                    onChange={(e) => setRenewQuota(e.target.value)}
+                    className="w-full bg-black border border-emerald-500/40 text-emerald-300 rounded-xl px-3 py-2 text-xs font-black outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsRenewing(!isRenewing)}
+                className="px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-[10px] font-black uppercase hover:bg-white/10"
+              >
+                {isRenewing ? 'Ocultar' : 'Ajustar Monto'}
+              </button>
+              <button
+                type="button"
+                onClick={() => onRenew && onRenew(loan, renewCap, renewQuota, 0)}
+                className="flex-1 bg-gradient-to-r from-emerald-500 to-cyan-400 text-black font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5"
+              >
+                <RefreshCw size={14} />
+                <span>Activar S/ {renewCap} (Cuota S/ {renewQuota})</span>
+              </button>
             </div>
           </div>
-          <div className="flex justify-between items-center mt-1.5">
-             <span className="text-[9px] text-slate-500 font-bold uppercase">{cuotasRestantes} días restantes</span>
-             <span className="text-[10px] font-black text-emerald-400 tracking-wider">{porcentajeProgreso.toFixed(1)}% COMPLETADO</span>
-          </div>
-        </div>
+        ) : (
+          <>
+            <div className="mb-4 bg-black/40 p-3 rounded-2xl border border-white/5">
+              <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                <span>Abonado: S/ {pagado.toFixed(2)}</span>
+                <span>Total Contrato: S/ {deudaOriginal.toFixed(2)}</span>
+              </div>
+              <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden relative">
+                <div 
+                  className={`h-full relative transition-all duration-1000 ease-out ${esFijo ? 'bg-purple-500' : porcentajeProgreso >= 100 ? 'bg-cyan-500' : 'bg-emerald-500'}`} 
+                  style={{ width: `${porcentajeProgreso}%` }}>
+                </div>
+              </div>
+              <div className="flex justify-between items-center mt-1.5">
+                 <span className="text-[9px] text-slate-500 font-bold uppercase">
+                   {esFijo
+                     ? (diasParaVencer > 0 ? `Faltan ${diasParaVencer} días para el pago` : diasParaVencer === 0 ? '¡Se paga hoy!' : `Vencido hace ${Math.abs(diasParaVencer)} días`)
+                     : `${cuotasRestantes} días restantes (S/ ${loan.cuotaDiaria}/día)`}
+                 </span>
+                 <span className={`text-[10px] font-black tracking-wider ${esFijo ? 'text-purple-400' : 'text-emerald-400'}`}>
+                   {porcentajeProgreso.toFixed(1)}% COMPLETADO
+                 </span>
+              </div>
+            </div>
 
-        {/* Cajas de Valores */}
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          <div className="bg-black/50 p-4 rounded-2xl border border-white/5 shadow-inner">
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Deuda Restante</p>
-            <p className="text-lg font-black text-white">S/ {loan.saldoPendiente}</p>
-          </div>
-          <div className={`bg-black/50 p-4 rounded-2xl border ${isDanger ? 'border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.15)]' : 'border-white/5'} shadow-inner relative overflow-hidden`}>
-            {isDanger && <div className="absolute top-0 right-0 w-12 h-12 bg-rose-500/20 blur-xl rounded-full"></div>}
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1 relative z-10">Exigible</p>
-            <p className={`text-xl font-black tracking-tight relative z-10 ${isDanger ? 'text-rose-400 drop-shadow-[0_0_10px_rgba(244,63,94,0.5)]' : (exigible > 0 ? 'text-amber-400' : 'text-slate-300')}`}>
-              <span>S/ {exigible.toFixed(2)}</span>
-            </p>
-          </div>
-        </div>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-black/50 p-4 rounded-2xl border border-white/5">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Falta para Cero</p>
+                <p className="text-lg font-black text-white">S/ {loan.saldoPendiente}</p>
+              </div>
 
-        {/* Acciones (Contacto y Pago) */}
-        <div className="flex items-center justify-between mt-auto">
-          <div className="flex gap-2">
-             {loan.yape && (
-               <button 
-                 onClick={handleCopyYape}
-                 className="w-10 h-10 rounded-xl bg-[#742284]/20 border border-[#742284]/40 flex items-center justify-center text-[#d87eed] hover:bg-[#742284]/40 transition-colors"
-                 title="Copiar Yape"
-               >
-                 {copied ? <Check size={18} /> : <Copy size={18} />}
-               </button>
-             )}
-             {loan.telefono && (
-               <button 
-                 onClick={handleWhatsApp}
-                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors shadow-[0_0_10px_rgba(34,197,94,0.1)] ${yaPagadoHoy ? 'bg-green-500/20 border-green-500/50 text-green-300' : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'}`}
-                 title={yaPagadoHoy ? "Enviar Comprobante (Anti-Spam)" : "Enviar Estado de Cuenta"}
-               >
-                 <MessageCircle size={18} />
-               </button>
-             )}
-          </div>
-          
-          <button onClick={() => onPayRequest(loan)}
-            className={`relative inline-flex items-center justify-center px-6 py-3.5 overflow-hidden font-black text-sm rounded-2xl transition-all duration-300 transform hover:scale-105 active:scale-95
-              ${yaPagadoHoy 
-                ? 'bg-slate-900 text-amber-500 border border-amber-500/30 shadow-[0_0_15px_rgba(251,191,36,0.15)] hover:shadow-[0_0_25px_rgba(251,191,36,0.3)]' 
-                : 'bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_35px_rgba(16,185,129,0.7)]'}`}>
-            <span className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent rounded-t-2xl pointer-events-none"></span>
-            <span className="relative z-10 flex items-center gap-2 tracking-wide">
-              {yaPagadoHoy ? <Lock size={16} /> : <Wallet size={16} />}
-              <span>{yaPagadoHoy ? 'LOCK' : 'EJECUTAR'}</span>
-            </span>
-          </button>
-        </div>
+              {esFijo ? (
+                <div className={`bg-black/50 p-4 rounded-2xl border ${enVentanaAlerta ? 'border-amber-500/40' : 'border-purple-500/20'} relative overflow-hidden`}>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">
+                    {diasParaVencer > 0 ? 'Juntar por Día' : 'Exigible Hoy'}
+                  </p>
+                  <p className={`text-xl font-black tracking-tight ${enVentanaAlerta ? 'text-amber-400' : 'text-purple-300'}`}>
+                    <span>
+                      S/ {diasParaVencer > 0 ? (loan.saldoPendiente / diasParaVencer).toFixed(2) : Number(loan.saldoPendiente).toFixed(2)}
+                    </span>
+                  </p>
+                </div>
+              ) : (
+                <div className={`bg-black/50 p-4 rounded-2xl border ${isDanger ? 'border-rose-500/20' : 'border-white/5'} relative overflow-hidden`}>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Exigible Hoy</p>
+                  <p className={`text-xl font-black tracking-tight ${isDanger ? 'text-rose-400' : (exigible > 0 ? 'text-amber-400' : 'text-slate-300')}`}>
+                    <span>S/ {exigible.toFixed(2)}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {estaCercaDeCero && (
+              <div className="mb-4 p-3 rounded-2xl bg-cyan-950/30 border border-cyan-500/30 flex items-center justify-between">
+                <div>
+                  <span className="text-[9px] font-black text-cyan-300 uppercase block">
+                    ⚡ Candidato a Ruleteo (A {cuotasRestantes} cuotas de cero)
+                  </span>
+                  <span className="text-[10px] text-slate-300 font-bold">
+                    Cancela S/ {loan.saldoPendiente} → Destraba S/ {baseCap}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onPayRequest(loan, loan.saldoPendiente)}
+                  className="bg-cyan-400 hover:bg-cyan-300 text-black font-black text-[10px] px-3 py-2 rounded-xl uppercase tracking-wider"
+                >
+                  Liquidar a Cero
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mt-auto">
+              <div className="flex gap-2 items-center">
+                 {loan.yape && (
+                   <button 
+                     onClick={handleCopyYape}
+                     className={`px-3 h-10 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-black transition-all ${
+                       copied
+                         ? 'bg-fuchsia-500 text-black border-fuchsia-400'
+                         : 'bg-[#742284]/25 border-[#742284]/50 text-[#e598f7] hover:bg-[#742284]/40'
+                     }`}
+                   >
+                     {copied ? <Check size={15} /> : <Copy size={15} />}
+                     <span>{copied ? '¡Yape Copiado!' : 'Yape'}</span>
+                   </button>
+                 )}
+                 {loan.telefono && (
+                   <button 
+                     onClick={handleWhatsApp}
+                     className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${yaPagadoHoy ? 'bg-green-500/20 border-green-500/50 text-green-300' : 'bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20'}`}
+                   >
+                     <MessageCircle size={18} />
+                   </button>
+                 )}
+              </div>
+              
+              <button onClick={() => onPayRequest(loan, null)}
+                className={`relative inline-flex items-center justify-center px-6 py-3.5 overflow-hidden font-black text-sm rounded-2xl transition-all
+                  ${yaPagadoHoy 
+                    ? 'bg-slate-900 text-amber-500 border border-amber-500/30' 
+                    : esFijo
+                    ? 'bg-purple-500 text-black'
+                    : 'bg-emerald-500 text-black'}`}>
+                <span className="relative z-10 flex items-center gap-2 tracking-wide">
+                  {yaPagadoHoy ? <Lock size={16} /> : <Wallet size={16} />}
+                  <span>{yaPagadoHoy ? 'LOCK' : esFijo ? 'LIQUIDAR / ABONAR' : 'EJECUTAR'}</span>
+                </span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
 // ==========================================
-// MODAL DE PAGO + PUENTE DE REBOTE DE VOUCHER & TICKET 24 CASILLAS
+// MODAL DE PAGO + AUTO-COPIADO YAPE + SUBIDA DE SCREENSHOT YAPE
 // ==========================================
-function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
-  const defaultAmt = initialAmount !== null ? initialAmount : (loan.montoExigible > 0 ? loan.montoExigible : loan.cuotaDiaria);
+function PaymentModal({ loan, initialAmount = null, autoCopiedInitial = false, onClose, onSubmit }) {
+  const esFijo = loan.modalidad === 'FIJO';
+  const defaultAmt = initialAmount !== null
+    ? initialAmount
+    : esFijo
+    ? loan.saldoPendiente
+    : (loan.montoExigible > 0 ? loan.montoExigible : loan.cuotaDiaria);
+
   const [amount, setAmount] = useState(defaultAmt.toString());
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('DIGITAL');
   const [nroOperacion, setNroOperacion] = useState('');
   const [voucherPreview, setVoucherPreview] = useState(null);
+  const [yapeCopiedBanner, setYapeCopiedBanner] = useState(autoCopiedInitial || Boolean(loan.yape));
   
   const [isSuccess, setIsSuccess] = useState(false);
   const [paidAmount, setPaidAmount] = useState(0);
@@ -1196,7 +2649,13 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
   const todayStr = getLocalTodayString();
   const requiresPassword = loan.lastManualPaymentDate === todayStr && (loan.manualPaymentsCount || 0) >= 1;
 
-  // Permitir pegar captura de Yape directamente con Ctrl+V
+  useEffect(() => {
+    if (loan?.yape) {
+      copyTextSafe(loan.yape);
+      setYapeCopiedBanner(true);
+    }
+  }, [loan]);
+
   useEffect(() => {
     const handlePaste = (e) => {
       if (isSuccess) return;
@@ -1217,12 +2676,47 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
     return () => window.removeEventListener('paste', handlePaste);
   }, [isSuccess]);
 
+  const handlePasteFromClipboardButton = async () => {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        setError('Usa el botón "Subir Screenshot" para elegir la captura de tu galería');
+        return;
+      }
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(t => t.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            setVoucherPreview(ev.target.result);
+            setError('');
+          };
+          reader.readAsDataURL(blob);
+          return;
+        }
+      }
+      setError('No se detectó imagen en el portapapeles. Usa "Subir Screenshot".');
+    } catch (err) {
+      setError('Elige tu captura con el botón "Subir Screenshot".');
+    }
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => setVoucherPreview(ev.target.result);
+    reader.onload = (ev) => {
+      setVoucherPreview(ev.target.result);
+      setError('');
+    };
     reader.readAsDataURL(file);
+  };
+
+  const handleManualCopyYape = () => {
+    if (!loan.yape) return;
+    copyTextSafe(loan.yape);
+    setYapeCopiedBanner(true);
   };
 
   const handleSubmit = async () => {
@@ -1238,7 +2732,6 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
     setIsSuccess(true);
   };
 
-  // Dibujar Ticket con 24 casillas + Voucher cuando entra a la pantalla de éxito
   useEffect(() => {
     if (!isSuccess || !canvasRef.current) return;
     const hoy = new Date();
@@ -1258,7 +2751,9 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
       cuotaDiaria: loan.cuotaDiaria || 25,
       metodoPago: paidMethod,
       nroOperacion: paidOp,
-      voucherDataUrl: voucherPreview
+      voucherDataUrl: voucherPreview,
+      modalidad: loan.modalidad || 'DIARIO',
+      fechaVencimiento: loan.fechaVencimiento || ''
     });
   }, [isSuccess, paidAmount, paidMethod, paidOp, voucherPreview, loan]);
 
@@ -1287,7 +2782,6 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
     link.click();
   };
 
-  // Rebote Inteligente: Copia o Comparte el Ticket de 24 casillas + Abre WhatsApp con Mensaje Anti-Spam
   const handleRebotarAlPrestamista = async () => {
     const saldoActualizado = Math.max(0, loan.saldoPendiente - paidAmount);
     const pagadoActualizado = (loan.pagadoAcumulado || 0) + paidAmount;
@@ -1308,13 +2802,12 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
       metodoPago: paidMethod,
       nroOperacion: paidOp,
       cuotasCubiertas,
-      totalCuotas
+      totalCuotas,
+      modalidad: loan.modalidad || 'DIARIO'
     });
 
-    // 1. Intentar copiar automáticamente la imagen del ticket al portapapeles (Ideal en PC/Laptop)
     await copiarTicketAlPortapapeles();
 
-    // 2. Si está en celular y soporta compartir archivos nativos a WhatsApp, ofrecer envío nativo
     if (canvasRef.current && navigator.canShare) {
       try {
         const blob = await new Promise(res => canvasRef.current.toBlob(res, 'image/png'));
@@ -1327,12 +2820,9 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
           });
           return;
         }
-      } catch (err) {
-        // Si cancela o falla share nativo, continúa al enlace directo de WhatsApp
-      }
+      } catch (err) {}
     }
 
-    // 3. Abrir el chat directo del prestamista con el mensaje Anti-Spam listo
     if (loan.telefono) {
       const urlSegura = `https://api.whatsapp.com/send?phone=51${loan.telefono}&text=${encodeURIComponent(mensajePlano)}`;
       window.open(urlSegura, '_blank');
@@ -1342,18 +2832,17 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
   if (isSuccess) {
     return (
       <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-3 overflow-y-auto animate-in fade-in duration-300">
-        <div className="bg-[#0a0a0a] w-full max-w-md rounded-[36px] border border-emerald-500/30 shadow-[0_0_60px_rgba(16,185,129,0.25)] p-5 sm:p-6 relative overflow-hidden my-auto max-h-[94dvh] flex flex-col">
+        <div className="bg-[#0a0a0a] w-full max-w-md rounded-[36px] border border-emerald-500/30 p-5 sm:p-6 relative overflow-hidden my-auto max-h-[94dvh] flex flex-col">
           <div className="flex justify-between items-center mb-3 shrink-0">
             <div className="flex items-center gap-2">
               <CheckCircle size={22} className="text-emerald-400" />
-              <h3 className="text-base font-black text-white uppercase tracking-tight">Ticket Oficial + 24 Casillas</h3>
+              <h3 className="text-base font-black text-white uppercase tracking-tight">Ticket Oficial Generado</h3>
             </div>
             <button onClick={onClose} className="bg-white/5 p-2 rounded-full text-slate-400 hover:text-white">
               <X size={18} />
             </button>
           </div>
 
-          {/* Vista previa del Ticket en Imagen generado por el programa */}
           <div className="overflow-y-auto rounded-2xl border border-white/10 bg-black/60 p-2 mb-3 flex-1 [&::-webkit-scrollbar]:hidden">
             <canvas ref={canvasRef} className="w-full h-auto rounded-xl shadow-lg" />
           </div>
@@ -1364,11 +2853,10 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
             </p>
           )}
 
-          {/* Botones de Rebote al Prestamista */}
           <div className="space-y-2.5 shrink-0">
             <button 
               onClick={handleRebotarAlPrestamista} 
-              className="w-full bg-[#25D366] hover:bg-[#1ebd5a] text-black font-black py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-[0_0_25px_rgba(37,211,102,0.4)] text-xs uppercase tracking-wider"
+              className="w-full bg-[#25D366] hover:bg-[#1ebd5a] text-black font-black py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all text-xs uppercase tracking-wider"
             >
               <MessageCircle size={18} />
               <span>Rebotar Ticket + Mensaje a {loan.prestamista}</span>
@@ -1398,39 +2886,100 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center z-50 p-4 pb-0 sm:pb-4 animate-in fade-in duration-300">
-      <div className="bg-[#0a0a0a] w-full max-w-sm rounded-t-[40px] sm:rounded-[40px] border border-white/10 shadow-[0_-20px_60px_rgba(0,0,0,0.8)] p-6 sm:p-7 pb-10 sm:pb-7 relative overflow-y-auto max-h-[92dvh] animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-400 [&::-webkit-scrollbar]:hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-[50px]"></div>
-        <div className="flex justify-between items-center mb-5 relative z-10">
+      <div className="bg-[#0a0a0a] w-full max-w-sm rounded-t-[40px] sm:rounded-[40px] border border-white/10 p-6 sm:p-7 pb-10 sm:pb-7 relative overflow-y-auto max-h-[92dvh] [&::-webkit-scrollbar]:hidden">
+        <div className="flex justify-between items-center mb-4 relative z-10">
           <h3 className="text-lg font-black text-white tracking-tighter uppercase">
-            Procesar Pago: <span className="text-emerald-400">{loan.prestamista}</span>
+            Pagar a: <span className="text-emerald-400">{loan.prestamista}</span>
           </h3>
-          <button onClick={onClose} className="bg-white/5 p-2 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-colors"><X size={18} /></button>
+          <button onClick={onClose} className="bg-white/5 p-2 rounded-full text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
+
+        {loan.yape ? (
+          <div className="mb-4 p-3 rounded-2xl bg-[#742284]/25 border border-fuchsia-500/50 flex items-center justify-between relative z-10">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-fuchsia-500 text-black flex items-center justify-center font-black shrink-0">
+                <Check size={18} />
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-fuchsia-300 block">
+                  {yapeCopiedBanner ? '¡Nº Yape Copiado Automáticamente!' : 'Número Yape del Cobrador'}
+                </span>
+                <span className="text-sm font-black text-white tracking-wider">{loan.yape}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleManualCopyYape}
+              className="px-2.5 py-2 rounded-xl bg-fuchsia-500/20 border border-fuchsia-400/40 text-fuchsia-200 text-[10px] font-black uppercase flex items-center gap-1"
+            >
+              <Copy size={12} />
+              <span>Copiar</span>
+            </button>
+          </div>
+        ) : null}
         
         <div className="flex gap-2 mb-4 relative z-10">
-          <button onClick={() => setPaymentMethod('DIGITAL')} className={`flex-1 py-2.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 border transition-all ${paymentMethod === 'DIGITAL' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.3)]' : 'bg-black/50 text-slate-500 border-white/5 hover:bg-black/80'}`}><Smartphone size={15}/> YAPE / DIGITAL</button>
-          <button onClick={() => setPaymentMethod('EFECTIVO')} className={`flex-1 py-2.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 border transition-all ${paymentMethod === 'EFECTIVO' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 shadow-[0_0_15px_rgba(52,211,153,0.3)]' : 'bg-black/50 text-slate-500 border-white/5 hover:bg-black/80'}`}><Banknote size={15}/> EFECTIVO</button>
+          <button onClick={() => setPaymentMethod('DIGITAL')} className={`flex-1 py-2.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 border transition-all ${paymentMethod === 'DIGITAL' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/50' : 'bg-black/50 text-slate-500 border-white/5'}`}><Smartphone size={15}/> YAPE / DIGITAL</button>
+          <button onClick={() => setPaymentMethod('EFECTIVO')} className={`flex-1 py-2.5 rounded-2xl text-xs font-black flex items-center justify-center gap-2 border transition-all ${paymentMethod === 'EFECTIVO' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' : 'bg-black/50 text-slate-500 border-white/5'}`}><Banknote size={15}/> EFECTIVO</button>
         </div>
 
-        <div className="space-y-4 mb-6 relative z-10">
+        <div className="space-y-4 mb-5 relative z-10">
           <div>
-            <label className="block text-[10px] font-bold text-emerald-400/80 mb-1.5 uppercase tracking-widest">Monto a Registrar (S/)</label>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="text-[10px] font-bold text-emerald-400/80 uppercase tracking-widest">Monto a Registrar (S/)</label>
+              <button
+                type="button"
+                onClick={() => setAmount(loan.saldoPendiente.toString())}
+                className="text-[9px] font-black bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 rounded-lg uppercase"
+              >
+                Cancelar al Cero (S/ {loan.saldoPendiente})
+              </button>
+            </div>
             <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setError(''); }}
-              className="w-full bg-black border-2 border-emerald-500/30 text-white rounded-2xl px-4 py-3.5 text-2xl font-black outline-none focus:border-emerald-400 text-center shadow-inner transition-all" />
+              className="w-full bg-black border-2 border-emerald-500/30 text-white rounded-2xl px-4 py-3 text-2xl font-black outline-none focus:border-emerald-400 text-center" />
           </div>
 
-          {/* Puente de Comprobante: Nº de Operación y Captura de Yape */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Sparkles size={13} /> Puente de Comprobante (Opcional)
-              </span>
-            </div>
+          <div className="bg-white/5 border border-cyan-500/30 rounded-2xl p-3.5 space-y-3">
+            <span className="text-[10px] font-black text-cyan-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Camera size={14} /> Pasar Screenshot de Yape a la Plataforma
+            </span>
+
+            {!voucherPreview ? (
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl border border-dashed border-emerald-500/50 bg-emerald-950/30 text-emerald-300 text-[10px] font-black cursor-pointer text-center uppercase">
+                  <Upload size={18} className="text-emerald-400" />
+                  <span>Subir Screenshot</span>
+                  <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={handlePasteFromClipboardButton}
+                  className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl border border-dashed border-cyan-500/50 bg-cyan-950/30 text-cyan-300 text-[10px] font-black text-center uppercase"
+                >
+                  <Clipboard size={18} className="text-cyan-400" />
+                  <span>Pegar Captura</span>
+                </button>
+              </div>
+            ) : (
+              <div className="relative rounded-xl overflow-hidden border border-emerald-500/50 bg-black/70 p-2 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <img src={voucherPreview} alt="Screenshot Yape" className="w-12 h-12 object-cover rounded-lg border border-white/10" />
+                  <div>
+                    <span className="text-[10px] font-black text-emerald-400 uppercase block">✓ Screenshot Cargado</span>
+                    <span className="text-[9px] text-slate-400">Se unirá al ticket oficial</span>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setVoucherPreview(null)} className="text-rose-400 p-1.5 rounded-lg">
+                  <X size={16} />
+                </button>
+              </div>
+            )}
 
             <div>
-              <label className="block text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Nº de Operación Yape / Ref.</label>
+              <label className="block text-[9px] font-bold text-slate-400 mb-1 uppercase">Nº de Operación Yape (Opcional)</label>
               <div className="relative">
-                <Hash size={14} className="absolute left-3.5 top-3 text-slate-500" />
+                <Hash size={14} className="absolute left-3.5 top-2.5 text-slate-500" />
                 <input
                   type="text"
                   value={nroOperacion}
@@ -1440,46 +2989,23 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
                 />
               </div>
             </div>
-
-            <div>
-              <label className="block text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                Adjuntar o Pegar (Ctrl+V) Captura del Yape
-              </label>
-              {!voucherPreview ? (
-                <label className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-xl border border-dashed border-cyan-500/40 bg-cyan-950/20 text-cyan-300 text-[11px] font-bold cursor-pointer hover:bg-cyan-950/40 transition-colors">
-                  <Upload size={14} />
-                  <span>Subir captura o presiona Ctrl+V</span>
-                  <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
-                </label>
-              ) : (
-                <div className="relative rounded-xl overflow-hidden border border-emerald-500/40 bg-black/60 p-1.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <img src={voucherPreview} alt="Voucher" className="w-10 h-10 object-cover rounded-lg" />
-                    <span className="text-[10px] font-black text-emerald-400 uppercase">Captura Lista para Incrustar</span>
-                  </div>
-                  <button type="button" onClick={() => setVoucherPreview(null)} className="text-rose-400 p-1.5 hover:bg-rose-500/20 rounded-lg">
-                    <X size={14} />
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
 
           {requiresPassword && (
-            <div className="animate-in slide-in-from-top-4">
-              <label className="block text-[10px] font-bold text-rose-400 mb-1.5 flex items-center gap-2 uppercase tracking-widest">
+            <div>
+              <label className="block text-[10px] font-bold text-rose-400 mb-1.5 flex items-center gap-2 uppercase">
                 <Lock size={12} /> <span>Protocolo (KGB2026):</span>
               </label>
               <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                className="w-full bg-black border-2 border-rose-500/40 text-white rounded-2xl px-4 py-3 text-lg text-center tracking-[0.5em] outline-none focus:border-rose-400 shadow-inner transition-all" />
+                className="w-full bg-black border-2 border-rose-500/40 text-white rounded-2xl px-4 py-3 text-lg text-center tracking-[0.5em] outline-none" />
             </div>
           )}
-          {error && <p className="text-rose-400 text-xs font-bold text-center uppercase tracking-widest animate-pulse">{error}</p>}
+          {error && <p className="text-rose-400 text-xs font-bold text-center uppercase animate-pulse">{error}</p>}
         </div>
 
-        <button onClick={handleSubmit} className="relative w-full overflow-hidden bg-emerald-500 text-black font-black py-4 rounded-2xl shadow-[0_0_30px_rgba(16,185,129,0.3)] hover:shadow-[0_0_40px_rgba(16,185,129,0.6)] text-sm tracking-widest uppercase transition-all">
-           <span className="relative z-10 flex justify-center items-center gap-2">
-             <span>Procesar y Generar Ticket 24D</span>
+        <button onClick={handleSubmit} className="w-full bg-emerald-500 text-black font-black py-4 rounded-2xl text-sm tracking-widest uppercase">
+           <span className="flex justify-center items-center gap-2">
+             <span>Procesar y Generar Ticket</span>
              <CheckCircle size={18}/>
            </span>
         </button>
@@ -1488,7 +3014,11 @@ function PaymentModal({ loan, initialAmount = null, onClose, onSubmit }) {
   );
 }
 
+// ==========================================
+// PESTAÑA NUEVO CONTRATO
+// ==========================================
 function AddLoanTab({ onAdd }) {
+  const [modalidad, setModalidad] = useState('DIARIO');
   const [prestamista, setPrestamista] = useState('');
   const [telefono, setTelefono] = useState('');
   const [yape, setYape] = useState('');
@@ -1498,6 +3028,9 @@ function AddLoanTab({ onAdd }) {
   
   const [fechaInicioStr, setFechaInicioStr] = useState(getLocalTodayString());
   const [pagadoPrevioStr, setPagadoPrevioStr] = useState('');
+
+  const [fechaVencimientoStr, setFechaVencimientoStr] = useState(addDaysToDateStr(getLocalTodayString(), 15));
+  const [diasAlerta, setDiasAlerta] = useState(5);
 
   const [loading, setLoading] = useState(false);
 
@@ -1511,7 +3044,7 @@ function AddLoanTab({ onAdd }) {
   const todayStr = getLocalTodayString();
   let diasTranscurridos = 0;
   
-  if (fechaInicioStr && fechaInicioStr < todayStr) {
+  if (modalidad === 'DIARIO' && fechaInicioStr && fechaInicioStr < todayStr) {
     let checkDate = addDaysToDateStr(fechaInicioStr, 1);
     while (checkDate <= todayStr) {
       if (getDayOfWeek(checkDate) !== 0) diasTranscurridos++;
@@ -1521,22 +3054,42 @@ function AddLoanTab({ onAdd }) {
   
   const saldoActual = Math.max(0, deudaTotal - pagadoPrevio);
   const deudaHipotetica = diasTranscurridos * cuota;
-  const exigibleReal = Math.max(0, deudaHipotetica - pagadoPrevio);
+  const diasParaVencerFijo = getDaysUntilDue(fechaVencimientoStr);
+  const exigibleReal = modalidad === 'FIJO'
+    ? (diasParaVencerFijo <= 0 ? saldoActual : 0)
+    : Math.max(0, deudaHipotetica - pagadoPrevio);
+
+  const handleCapitalChange = (val) => {
+    setCapitalStr(val);
+    const numCap = parseFloat(val) || 0;
+    const numPorc = parseFloat(porcentajeStr) || 20;
+    if (numCap > 0 && modalidad === 'DIARIO') {
+      const total = numCap * (1 + numPorc / 100);
+      setCuotaStr(Math.round(total / 24).toString());
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!prestamista || capital <= 0 || cuota <= 0) return;
+    if (!prestamista || capital <= 0) return;
+    if (modalidad === 'DIARIO' && cuota <= 0) return;
+    if (modalidad === 'FIJO' && !fechaVencimientoStr) return;
+
     setLoading(true);
 
     const newLoan = {
+      modalidad,
       prestamista, 
       telefono, 
       yape,
       capital, 
+      cupoDisponible: capital,
       porcentajeInteres: porcentaje,
       interes, 
       deudaTotal, 
-      cuotaDiaria: cuota,
+      cuotaDiaria: modalidad === 'FIJO' ? 0 : cuota,
+      fechaVencimiento: modalidad === 'FIJO' ? fechaVencimientoStr : '',
+      diasAlerta: modalidad === 'FIJO' ? diasAlerta : 0,
       saldoPendiente: saldoActual, 
       montoExigible: exigibleReal, 
       pagadoAcumulado: pagadoPrevio,
@@ -1544,7 +3097,8 @@ function AddLoanTab({ onAdd }) {
       lastProcessedDate: todayStr,
       lastManualPaymentDate: null, 
       manualPaymentsCount: 0,
-      ultimoPagoMonto: 0
+      ultimoPagoMonto: 0,
+      yaMePrestoBloqueado: true
     };
 
     await onAdd(newLoan);
@@ -1561,24 +3115,53 @@ function AddLoanTab({ onAdd }) {
 
   return (
     <div className="relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8">
-      <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 mb-6 tracking-tighter uppercase">Generar Contrato</h2>
+      <h2 className="text-2xl font-black text-white mb-5 tracking-tighter uppercase">Generar Nuevo Préstamo</h2>
       
-      <form onSubmit={handleSubmit} className="bg-white/5 backdrop-blur-xl p-6 sm:p-8 rounded-[32px] border border-white/10 space-y-6 shadow-[0_20px_40px_rgba(0,0,0,0.5)]">
-        
+      <div className="grid grid-cols-2 gap-2.5 bg-slate-900/90 p-2 rounded-3xl border border-white/10 mb-5">
+        <button
+          type="button"
+          onClick={() => setModalidad('DIARIO')}
+          className={`py-3.5 px-3 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+            modalidad === 'DIARIO'
+              ? 'bg-emerald-500 text-black'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Calendar size={15} />
+          <span>Cobrador Diario</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setModalidad('FIJO')}
+          className={`py-3.5 px-3 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+            modalidad === 'FIJO'
+              ? 'bg-gradient-to-r from-purple-500 to-amber-400 text-black'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <BellRing size={15} />
+          <span>Prestamista Fijo</span>
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="bg-white/5 backdrop-blur-xl p-6 rounded-[32px] border border-white/10 space-y-5">
         <div className="space-y-4">
           <div>
-            <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Prestamista</label>
-            <input type="text" value={prestamista} onChange={(e) => setPrestamista(e.target.value)} required className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-5 py-4 font-bold outline-none focus:border-cyan-500 focus:shadow-[0_0_15px_rgba(6,182,212,0.2)] transition-all" placeholder="Ej. Steven" />
+            <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">
+              {modalidad === 'FIJO' ? 'Nombre del Prestamista Fijo' : 'Nombre del Cobrador Diario'}
+            </label>
+            <input type="text" value={prestamista} onChange={(e) => setPrestamista(e.target.value)} required className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-5 py-4 font-bold outline-none focus:border-cyan-500" placeholder="Ej. Liliana, Dayra, Gael..." />
           </div>
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Nº WhatsApp</label>
-              <input type="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-green-500 focus:shadow-[0_0_15px_rgba(34,197,94,0.2)] transition-all" placeholder="999..." />
+              <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Nº WhatsApp</label>
+              <input type="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm font-bold outline-none" placeholder="999..." />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Nº Yape</label>
-              <input type="tel" value={yape} onChange={(e) => setYape(e.target.value)} className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm font-bold outline-none focus:border-indigo-500 focus:shadow-[0_0_15px_rgba(99,102,241,0.2)] transition-all" placeholder="999..." />
+              <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Nº Yape</label>
+              <input type="tel" value={yape} onChange={(e) => setYape(e.target.value)} className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 text-sm font-bold outline-none" placeholder="999..." />
             </div>
           </div>
         </div>
@@ -1586,79 +3169,102 @@ function AddLoanTab({ onAdd }) {
         <div className="pt-4 border-t border-white/10 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Capital (S/)</label>
-              <input type="number" value={capitalStr} onChange={(e) => setCapitalStr(e.target.value)} required min="1" className="w-full bg-black/60 border border-white/10 text-emerald-400 rounded-2xl px-4 py-4 font-black outline-none focus:border-emerald-500 focus:shadow-[0_0_15px_rgba(16,185,129,0.2)] transition-all text-lg" placeholder="500" />
+              <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Capital Recibido (S/)</label>
+              <input type="number" value={capitalStr} onChange={(e) => handleCapitalChange(e.target.value)} required min="1" className="w-full bg-black/60 border border-white/10 text-emerald-400 rounded-2xl px-4 py-4 font-black outline-none text-lg" placeholder="500" />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Interés (%)</label>
-              <input type="number" value={porcentajeStr} onChange={(e) => setPorcentajeStr(e.target.value)} required min="0" className="w-full bg-black/60 border border-white/10 text-rose-400 rounded-2xl px-4 py-4 font-black outline-none focus:border-rose-500 focus:shadow-[0_0_15px_rgba(244,63,94,0.2)] transition-all text-lg" placeholder="20" />
+              <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Interés (%)</label>
+              <input type="number" value={porcentajeStr} onChange={(e) => setPorcentajeStr(e.target.value)} required min="0" className="w-full bg-black/60 border border-white/10 text-rose-400 rounded-2xl px-4 py-4 font-black outline-none text-lg" placeholder="20" />
             </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Cuota Diaria (S/)</label>
-            <input type="number" value={cuotaStr} onChange={(e) => setCuotaStr(e.target.value)} required min="1" className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-5 py-4 font-bold outline-none focus:border-cyan-500 focus:shadow-[0_0_15px_rgba(6,182,212,0.2)] transition-all" placeholder="25" />
-          </div>
+
+          {modalidad === 'DIARIO' ? (
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase tracking-widest">Cuota Diaria (S/)</label>
+              <input type="number" value={cuotaStr} onChange={(e) => setCuotaStr(e.target.value)} required min="1" className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-5 py-4 font-bold outline-none" placeholder="25" />
+            </div>
+          ) : (
+            <div className="bg-purple-950/25 border border-purple-500/30 rounded-2xl p-4 space-y-4">
+              <div className="flex items-center gap-2 text-purple-300 text-[10px] font-black uppercase tracking-widest">
+                <CalendarClock size={15} className="text-amber-400" />
+                <span>Configuración de Pago Único y Alerta</span>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-300 mb-1.5 uppercase">
+                  ¿Qué día exacto tienes que pagarle todo?
+                </label>
+                <input
+                  type="date"
+                  value={fechaVencimientoStr}
+                  onChange={(e) => setFechaVencimientoStr(e.target.value)}
+                  required
+                  className="w-full bg-black/70 border border-purple-500/40 text-white rounded-xl px-4 py-3 font-black text-sm outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-amber-300 mb-2 uppercase">
+                  ¿Cuántos días antes quieres que te avise el Radar?
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setDiasAlerta(3)}
+                    className={`py-2.5 rounded-xl text-xs font-black uppercase border ${
+                      diasAlerta === 3 ? 'bg-amber-400 text-black border-amber-300' : 'bg-black/50 text-slate-400 border-white/10'
+                    }`}
+                  >
+                    🔔 3 Días Antes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiasAlerta(5)}
+                    className={`py-2.5 rounded-xl text-xs font-black uppercase border ${
+                      diasAlerta === 5 ? 'bg-amber-400 text-black border-amber-300' : 'bg-black/50 text-slate-400 border-white/10'
+                    }`}
+                  >
+                    🔔 5 Días Antes
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="pt-4 border-t border-white/10 space-y-4">
           <h3 className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2">
-             <Calendar size={14}/> Sincronizar Préstamo Antiguo
+             <Calendar size={14}/> {modalidad === 'FIJO' ? 'Fecha de Préstamo y Adelantos' : 'Sincronizar Nuevo Préstamo Actual'}
           </h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Fecha de Entrega</label>
-              <input type="date" value={fechaInicioStr} onChange={(e) => setFechaInicioStr(e.target.value)} required className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 font-bold outline-none focus:border-cyan-500 transition-all text-xs" />
+              <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase">Fecha de Entrega</label>
+              <input type="date" value={fechaInicioStr} onChange={(e) => setFechaInicioStr(e.target.value)} required className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 font-bold outline-none text-xs" />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Ya pagado (S/)</label>
-              <input type="number" value={pagadoPrevioStr} onChange={(e) => setPagadoPrevioStr(e.target.value)} min="0" className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 font-bold outline-none focus:border-cyan-500 transition-all text-xs" placeholder="0" />
+              <label className="block text-[10px] font-bold text-slate-400 mb-2 uppercase">Ya pagado (S/)</label>
+              <input type="number" value={pagadoPrevioStr} onChange={(e) => setPagadoPrevioStr(e.target.value)} min="0" className="w-full bg-black/60 border border-white/10 text-white rounded-2xl px-4 py-3 font-bold outline-none text-xs" placeholder="0" />
             </div>
           </div>
         </div>
 
         {capital > 0 && (
-          <div className="bg-emerald-950/30 p-6 rounded-3xl border border-emerald-500/20 mt-8 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 blur-xl rounded-full"></div>
-            <h4 className="text-[10px] font-black text-emerald-400 mb-5 flex items-center gap-2 uppercase tracking-widest">
-              <AlertCircle size={14} /> 
-              <span>Proyección (+{porcentaje}%)</span>
-            </h4>
-            <div className="space-y-4 text-sm font-bold">
-              <div className="flex justify-between text-slate-400"><span>BASE:</span> <span>S/ {capital.toFixed(2)}</span></div>
-              <div className="flex justify-between text-rose-400 drop-shadow-[0_0_5px_rgba(244,63,94,0.5)]"><span>CARGO FIJO:</span> <span>+ S/ {interes.toFixed(2)}</span></div>
-              <div className="flex justify-between pt-4 border-t border-emerald-500/20 text-white text-lg tracking-tight">
-                <span>DEUDA ORIGINAL:</span> 
-                <span className="text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]">S/ {deudaTotal.toFixed(2)}</span>
-              </div>
-              
-              {(diasTranscurridos > 0 || pagadoPrevio > 0) && (
-                <div className="mt-4 pt-4 border-t border-dashed border-cyan-500/30 space-y-2">
-                   <div className="flex justify-between text-[10px] text-cyan-400 uppercase tracking-widest">
-                     <span>Días Transcurridos:</span> <span>{diasTranscurridos} días hábiles</span>
-                   </div>
-                   <div className="flex justify-between text-[10px] text-slate-400 uppercase tracking-widest">
-                     <span>Ya cobrado:</span> <span>- S/ {pagadoPrevio.toFixed(2)}</span>
-                   </div>
-                   <div className="flex justify-between text-amber-400 font-black mt-2 tracking-tight">
-                     <span>EXIGIBLE HOY (MORA):</span> <span>S/ {exigibleReal.toFixed(2)}</span>
-                   </div>
-                   <div className="flex justify-between text-emerald-300 font-black tracking-tight">
-                     <span>SALDO RESTANTE:</span> <span>S/ {saldoActual.toFixed(2)}</span>
-                   </div>
-                </div>
-              )}
-
-              {cuota > 0 && (
-                 <div className="text-center mt-4 text-[10px] text-emerald-500/80 uppercase tracking-widest">
-                   Se terminará de pagar en aprox. {Math.ceil(saldoActual / cuota)} días hábiles
-                 </div>
-              )}
+          <div className="bg-emerald-950/30 p-5 rounded-3xl border border-emerald-500/20 space-y-3 text-sm font-bold">
+            <div className="flex justify-between text-slate-400"><span>BASE:</span> <span>S/ {capital.toFixed(2)}</span></div>
+            <div className="flex justify-between text-rose-400"><span>INTERÉS (+{porcentaje}%):</span> <span>+ S/ {interes.toFixed(2)}</span></div>
+            <div className="flex justify-between pt-3 border-t border-emerald-500/20 text-white text-base">
+              <span>TOTAL A PAGAR:</span> 
+              <span className="text-emerald-400">S/ {deudaTotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-cyan-300 text-xs">
+              <span>SALDO ACTUAL:</span>
+              <span>S/ {saldoActual.toFixed(2)}</span>
             </div>
           </div>
         )}
 
-        <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-black py-5 rounded-2xl shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_35px_rgba(6,182,212,0.6)] mt-8 flex justify-center items-center gap-2 uppercase tracking-widest transition-all">
-          {loading ? <Loader2 size={20} className="animate-spin" /> : <span>Inicializar Contrato</span>}
+        <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-black py-4 rounded-2xl flex justify-center items-center gap-2 uppercase tracking-widest">
+          {loading ? <Loader2 size={20} className="animate-spin" /> : <span>Registrar Nuevo Préstamo Actual</span>}
         </button>
       </form>
     </div>
@@ -1666,18 +3272,19 @@ function AddLoanTab({ onAdd }) {
 }
 
 // ==========================================
-// HISTORIAL POR COBRADOR + TABLERO 24 CUOTAS + EXPORTADOR DE IMAGEN
+// HISTORIAL POR COBRADOR (SOLO MUESTRA LOS PRESTAMISTAS ACTUALES + BOTÓN LIMPIAR ANTERIORES)
 // ==========================================
-function HistoryTab({ logs, loans, onRevert }) {
+function HistoryTab({ logs, loans, onRevert, onDeleteReverted, onPurgeLenderHistory, onPurgeAllOldHistory }) {
+  // SOLO mostrar los cobradores que existen actualmente en la lista de préstamos vigentes
   const listaCobradores = useMemo(() => {
     const nombresLoans = loans.map(l => l.prestamista).filter(Boolean);
-    const nombresLogs = (logs || []).map(l => l.prestamista).filter(Boolean);
-    return [...new Set([...nombresLoans, ...nombresLogs])];
-  }, [loans, logs]);
+    return [...new Set(nombresLoans)];
+  }, [loans]);
 
   const [selectedCobrador, setSelectedCobrador] = useState('');
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [copiadoImg, setCopiadoImg] = useState(false);
+  const [purgingNotice, setPurgingNotice] = useState('');
   const historyCanvasRef = useRef(null);
 
   useEffect(() => {
@@ -1687,24 +3294,41 @@ function HistoryTab({ logs, loans, onRevert }) {
   }, [listaCobradores, selectedCobrador]);
 
   const loanActual = loans.find(l => l.prestamista === selectedCobrador);
-  const logsDelCobrador = (logs || []).filter(log => log.prestamista === selectedCobrador);
+  const esFijo = loanActual?.modalidad === 'FIJO';
+
+  // Filtrar solo logs que correspondan al préstamo actual
+  const logsDelCobrador = (logs || []).filter(
+    log => (loanActual && log.loanId === loanActual.id) || log.prestamista === selectedCobrador
+  );
   const pagosRegistrados = logsDelCobrador.filter(log => log.tipo === 'PAGO');
+  const borradosRegistrados = logsDelCobrador.filter(log => log.tipo === 'REVERSO' || log.tipo === 'ELIMINACION');
 
   const cuotaDiaria = loanActual?.cuotaDiaria || 25;
   const deudaTotal = loanActual?.deudaTotal || 600;
-  const totalCuotasContrato = Math.max(1, Math.round(deudaTotal / cuotaDiaria)) || 24;
+  const totalCuotasContrato = esFijo ? 1 : (Math.max(1, Math.round(deudaTotal / cuotaDiaria)) || 24);
   
   const sumaLogsPagos = pagosRegistrados.reduce((acc, p) => acc + (p.monto || 0), 0);
   const totalPagadoReal = loanActual ? (loanActual.pagadoAcumulado || 0) : sumaLogsPagos;
   const saldoPendienteReal = loanActual ? (loanActual.saldoPendiente || 0) : Math.max(0, deudaTotal - totalPagadoReal);
 
-  const cuotasCompletas = Math.floor((totalPagadoReal + 0.001) / cuotaDiaria);
-  const residuoParcial = Math.max(0, totalPagadoReal - (cuotasCompletas * cuotaDiaria));
+  const cuotasCompletas = esFijo ? (saldoPendienteReal <= 0 ? 1 : 0) : Math.floor((totalPagadoReal + 0.001) / cuotaDiaria);
+  const residuoParcial = esFijo ? totalPagadoReal : Math.max(0, totalPagadoReal - (cuotasCompletas * cuotaDiaria));
 
   const pagosCronologicos = [...pagosRegistrados].reverse();
-  const montoPrevioSincronizado = Math.max(0, totalPagadoReal - sumaLogsPagos);
 
-  // Renderizar el ticket cuando el usuario abre el generador desde el Historial
+  const handleCleanCurrentLenderLogs = async () => {
+    if (!selectedCobrador) return;
+    await onPurgeLenderHistory(selectedCobrador, loanActual?.id || null);
+    setPurgingNotice(`Historial anterior de ${selectedCobrador} limpiado.`);
+    setTimeout(() => setPurgingNotice(''), 3000);
+  };
+
+  const handleCleanAllOrphanLogs = async () => {
+    await onPurgeAllOldHistory(false);
+    setPurgingNotice('Se borraron todos los préstamos antiguos que ya no están activos.');
+    setTimeout(() => setPurgingNotice(''), 3000);
+  };
+
   useEffect(() => {
     if (!showTicketModal || !historyCanvasRef.current || !selectedCobrador) return;
     const hoy = new Date();
@@ -1723,9 +3347,11 @@ function HistoryTab({ logs, loans, onRevert }) {
       cuotaDiaria,
       metodoPago: ultimoPago?.metodo || 'DIGITAL',
       nroOperacion: ultimoPago?.nroOperacion || '',
-      voucherDataUrl: null
+      voucherDataUrl: null,
+      modalidad: loanActual?.modalidad || 'DIARIO',
+      fechaVencimiento: loanActual?.fechaVencimiento || ''
     });
-  }, [showTicketModal, selectedCobrador, deudaTotal, totalPagadoReal, saldoPendienteReal, cuotaDiaria, pagosRegistrados]);
+  }, [showTicketModal, selectedCobrador, deudaTotal, totalPagadoReal, saldoPendienteReal, cuotaDiaria, pagosRegistrados, loanActual]);
 
   const copiarCartillaPortapapeles = async () => {
     if (!historyCanvasRef.current) return;
@@ -1744,7 +3370,7 @@ function HistoryTab({ logs, loans, onRevert }) {
   const descargarCartillaPNG = () => {
     if (!historyCanvasRef.current) return;
     const link = document.createElement('a');
-    link.download = `Cartilla_24_Cuotas_${selectedCobrador}.png`;
+    link.download = `Cartilla_${selectedCobrador}.png`;
     link.href = historyCanvasRef.current.toDataURL('image/png');
     link.click();
   };
@@ -1760,7 +3386,9 @@ function HistoryTab({ logs, loans, onRevert }) {
       fechaStr,
       horaStr,
       saldoRestante: saldoPendienteReal,
-      exigible: loanActual?.montoExigible || 0
+      exigible: loanActual?.montoExigible || 0,
+      modalidad: loanActual?.modalidad || 'DIARIO',
+      fechaVencimiento: loanActual?.fechaVencimiento || ''
     });
 
     if (historyCanvasRef.current && navigator.canShare) {
@@ -1784,22 +3412,35 @@ function HistoryTab({ logs, loans, onRevert }) {
     return (
       <div className="text-center p-10 mt-10 relative z-10">
         <FileText className="mx-auto text-slate-700 mb-4" size={48} />
-        <p className="text-slate-400 font-bold tracking-wide">Sin cobradores registrados</p>
-        <p className="text-slate-600 text-xs mt-2">Agrega un préstamo para ver el expediente de sus 24 cuotas.</p>
+        <p className="text-slate-400 font-bold tracking-wide">Sin cobradores activos</p>
+        <p className="text-slate-600 text-xs mt-2">Agrega tus préstamos actuales en NUEVO.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-5 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8">
-      <div className="mb-2 mt-2 flex items-center justify-between">
+      <div className="mb-2 mt-2 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
-          <User className="text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.8)]" size={24} />
-          <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 tracking-tighter uppercase">Expediente por Cobrador</h2>
+          <User className="text-emerald-400" size={24} />
+          <h2 className="text-xl font-black text-white tracking-tighter uppercase">Expediente Actual</h2>
         </div>
+        <button
+          type="button"
+          onClick={handleCleanAllOrphanLogs}
+          className="px-3 py-1.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[9px] font-black uppercase hover:bg-rose-500/25"
+        >
+          🧹 Purgar Préstamos Antiguos
+        </button>
       </div>
 
-      {/* Selector de Cobradores */}
+      {purgingNotice && (
+        <div className="p-3 rounded-2xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs font-black text-center">
+          {purgingNotice}
+        </div>
+      )}
+
+      {/* Selector de Cobradores Actuales */}
       <div className="flex gap-2.5 overflow-x-auto pb-2 [&::-webkit-scrollbar]:hidden">
         {listaCobradores.map(cobrador => {
           const isSelected = selectedCobrador === cobrador;
@@ -1809,7 +3450,7 @@ function HistoryTab({ logs, loans, onRevert }) {
               onClick={() => setSelectedCobrador(cobrador)}
               className={`px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all flex items-center gap-2 ${
                 isSelected
-                  ? 'bg-gradient-to-r from-emerald-500 to-cyan-400 text-black shadow-[0_0_20px_rgba(16,185,129,0.4)] scale-[1.02]'
+                  ? 'bg-gradient-to-r from-emerald-500 to-cyan-400 text-black'
                   : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'
               }`}
             >
@@ -1820,16 +3461,27 @@ function HistoryTab({ logs, loans, onRevert }) {
         })}
       </div>
 
-      {/* Tarjeta Resumen del Cobrador + Botón Generador de Ticket en Imagen */}
-      <div className="bg-slate-900/80 border border-white/10 rounded-[28px] p-5 backdrop-blur-xl shadow-lg">
+      {/* Tarjeta Resumen del Cobrador */}
+      <div className="bg-slate-900/80 border border-white/10 rounded-[28px] p-5 backdrop-blur-xl">
         <div className="flex justify-between items-center mb-4 pb-3 border-b border-white/10">
           <div>
-            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 block">Estado del Cobrador</span>
+            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 block">
+              {esFijo ? 'Prestamista Fijo (Pago Único)' : 'Ciclo Vigente del Cobrador'}
+            </span>
             <h3 className="text-xl font-black text-white tracking-tight">{selectedCobrador}</h3>
+            {loanActual?.yape && (
+              <span className="text-[10px] font-bold text-fuchsia-400 block mt-0.5">Yape: {loanActual.yape}</span>
+            )}
           </div>
           <div className="text-right">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block">Avance de Cuotas</span>
-            <span className="text-lg font-black text-cyan-400">{Math.min(totalCuotasContrato, cuotasCompletas)} / {totalCuotasContrato} DÍAS</span>
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block">
+              {esFijo ? 'Vencimiento' : 'Avance Actual'}
+            </span>
+            <span className="text-lg font-black text-cyan-400">
+              {esFijo
+                ? (loanActual?.fechaVencimiento ? formatDate(loanActual.fechaVencimiento) : 'Pago Único')
+                : `${Math.min(totalCuotasContrato, cuotasCompletas)} / ${totalCuotasContrato} DÍAS`}
+            </span>
           </div>
         </div>
 
@@ -1848,88 +3500,89 @@ function HistoryTab({ logs, loans, onRevert }) {
           </div>
         </div>
 
-        <button
-          onClick={() => setShowTicketModal(true)}
-          className="w-full bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 border border-cyan-400/40 text-cyan-300 font-black py-3 rounded-2xl text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(6,182,212,0.15)] transition-all"
-        >
-          <ImageIcon size={16} />
-          <span>Generar Ticket en Imagen ({totalCuotasContrato} Casillas)</span>
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowTicketModal(true)}
+            className="flex-1 bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 border border-cyan-400/40 text-cyan-300 font-black py-3 rounded-2xl text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+          >
+            <ImageIcon size={16} />
+            <span>Ticket ({esFijo ? 'Pago Único' : `${totalCuotasContrato} Casillas`})</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleCleanCurrentLenderLogs}
+            className="px-3 py-3 rounded-2xl bg-white/5 border border-white/10 text-slate-300 hover:text-rose-300 text-[10px] font-black uppercase"
+            title="Limpiar lista de pagos anteriores de este cobrador"
+          >
+            Limpiar Ciclo Viejo
+          </button>
+        </div>
       </div>
 
       {/* Tablero Visual de las 24 Cuotas */}
-      <div className="bg-[#0a0a0a]/90 border border-white/10 rounded-[28px] p-5 backdrop-blur-xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <LayoutGrid size={16} className="text-cyan-400" />
-            <h4 className="text-xs font-black uppercase tracking-widest text-white">Cartilla de {totalCuotasContrato} Cuotas (S/ {cuotaDiaria} c/u)</h4>
-          </div>
-          <span className="text-[10px] font-bold text-emerald-400">{Math.max(0, totalCuotasContrato - cuotasCompletas)} pendientes</span>
-        </div>
-
-        <div className="grid grid-cols-6 gap-2">
-          {Array.from({ length: totalCuotasContrato }).map((_, idx) => {
-            const numeroCuota = idx + 1;
-            const isPaid = numeroCuota <= cuotasCompletas;
-            const isPartial = numeroCuota === cuotasCompletas + 1 && residuoParcial > 0.01;
-
-            return (
-              <div
-                key={numeroCuota}
-                className={`relative rounded-xl p-2 flex flex-col items-center justify-center border transition-all ${
-                  isPaid
-                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]'
-                    : isPartial
-                    ? 'bg-amber-500/20 border-amber-400/50 text-amber-300 animate-pulse'
-                    : 'bg-black/50 border-white/5 text-slate-600'
-                }`}
-              >
-                <span className="text-[9px] font-black uppercase">Día {numeroCuota}</span>
-                {isPaid ? (
-                  <CheckCircle size={14} className="text-emerald-400 my-1" />
-                ) : isPartial ? (
-                  <Clock size={14} className="text-amber-400 my-1" />
-                ) : (
-                  <span className="text-[10px] font-bold my-1 opacity-40">--</span>
-                )}
-                <span className="text-[8px] font-black">
-                  {isPaid ? `S/${cuotaDiaria}` : isPartial ? `S/${residuoParcial.toFixed(0)}` : `S/${cuotaDiaria}`}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Lista Detallada de Pagos Hechos a este Cobrador */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">
-            Pagos Realizados a {selectedCobrador} ({pagosRegistrados.length})
-          </h4>
-        </div>
-
-        {montoPrevioSincronizado > 0.01 && (
-          <div className="p-4 rounded-2xl border border-cyan-500/30 bg-cyan-950/20 flex justify-between items-center">
-            <div>
-              <span className="text-[9px] font-black uppercase tracking-widest text-cyan-400 block">Sincronización Inicial (Máquina del Tiempo)</span>
-              <p className="text-xs font-bold text-slate-300 mt-0.5">Pagos anteriores registrados al crear el contrato</p>
+      {!esFijo && (
+        <div className="bg-[#0a0a0a]/90 border border-white/10 rounded-[28px] p-5 backdrop-blur-xl">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <LayoutGrid size={16} className="text-cyan-400" />
+              <h4 className="text-xs font-black uppercase tracking-widest text-white">Cartilla de {totalCuotasContrato} Cuotas (S/ {cuotaDiaria} c/u)</h4>
             </div>
-            <span className="text-base font-black text-cyan-400">S/ {montoPrevioSincronizado.toFixed(2)}</span>
+            <span className="text-[10px] font-bold text-emerald-400">{Math.max(0, totalCuotasContrato - cuotasCompletas)} pendientes</span>
           </div>
-        )}
 
-        {pagosCronologicos.length === 0 && montoPrevioSincronizado <= 0.01 ? (
+          <div className="grid grid-cols-6 gap-2">
+            {Array.from({ length: totalCuotasContrato }).map((_, idx) => {
+              const numeroCuota = idx + 1;
+              const isPaid = numeroCuota <= cuotasCompletas;
+              const isPartial = numeroCuota === cuotasCompletas + 1 && residuoParcial > 0.01;
+
+              return (
+                <div
+                  key={numeroCuota}
+                  className={`relative rounded-xl p-2 flex flex-col items-center justify-center border transition-all ${
+                    isPaid
+                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                      : isPartial
+                      ? 'bg-amber-500/20 border-amber-400/50 text-amber-300 animate-pulse'
+                      : 'bg-black/50 border-white/5 text-slate-600'
+                  }`}
+                >
+                  <span className="text-[9px] font-black uppercase">Día {numeroCuota}</span>
+                  {isPaid ? (
+                    <CheckCircle size={14} className="text-emerald-400 my-1" />
+                  ) : isPartial ? (
+                    <Clock size={14} className="text-amber-400 my-1" />
+                  ) : (
+                    <span className="text-[10px] font-bold my-1 opacity-40">--</span>
+                  )}
+                  <span className="text-[8px] font-black">
+                    {isPaid ? `S/${cuotaDiaria}` : isPartial ? `S/${residuoParcial.toFixed(0)}` : `S/${cuotaDiaria}`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Lista de Pagos del Préstamo Actual */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 px-1">
+          Pagos del Ciclo Actual a {selectedCobrador} ({pagosRegistrados.length})
+        </h4>
+
+        {pagosCronologicos.length === 0 ? (
           <div className="text-center p-6 bg-white/5 rounded-2xl border border-white/5">
-            <p className="text-slate-500 text-xs font-bold">Aún no hay abonos individuales registrados para {selectedCobrador}.</p>
+            <p className="text-slate-500 text-xs font-bold">Sin pagos individuales registrados en este nuevo ciclo.</p>
           </div>
         ) : (
           [...pagosCronologicos].reverse().map((log, revIdx) => {
             const numeroAbono = pagosCronologicos.length - revIdx;
             const esEfectivo = log.metodo === 'EFECTIVO' || (log.descripcion && log.descripcion.toLowerCase().includes('efectivo'));
+            const numYape = log.yapeAsociado || loanActual?.yape || '';
 
             return (
-              <div key={log.id} className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/20 backdrop-blur-md flex justify-between items-center shadow-sm">
+              <div key={log.id} className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-950/20 flex justify-between items-center">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="bg-emerald-500 text-black text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
@@ -1939,7 +3592,7 @@ function HistoryTab({ logs, loans, onRevert }) {
                       esEfectivo ? 'bg-amber-500/10 text-amber-300 border-amber-500/30' : 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30'
                     }`}>
                       {esEfectivo ? <Banknote size={10} /> : <Smartphone size={10} />}
-                      {esEfectivo ? 'Efectivo' : 'Yape / Digital'}
+                      {esEfectivo ? 'Efectivo' : `Yape ${numYape ? `(${numYape})` : ''}`}
                     </span>
                     {log.nroOperacion && (
                       <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10">
@@ -1948,7 +3601,7 @@ function HistoryTab({ logs, loans, onRevert }) {
                     )}
                   </div>
                   <p className="text-xs font-bold text-slate-300">
-                    {formatDate(log.fecha)} a las {formatTime(log.fecha)}
+                    {selectedCobrador} • {formatDate(log.fecha)} a las {formatTime(log.fecha)}
                   </p>
                 </div>
 
@@ -1956,7 +3609,7 @@ function HistoryTab({ logs, loans, onRevert }) {
                   <span className="text-lg font-black text-emerald-400">S/ {(log.monto || 0).toFixed(2)}</span>
                   <button
                     onClick={() => onRevert(log)}
-                    className="bg-rose-500/10 text-rose-400 p-2 rounded-xl border border-rose-500/30 hover:bg-rose-500/30 transition-all"
+                    className="bg-rose-500/10 text-rose-400 p-2 rounded-xl border border-rose-500/30 hover:bg-rose-500/30"
                     title="Anular y revertir este pago"
                   >
                     <Trash2 size={15} />
@@ -1968,7 +3621,59 @@ function HistoryTab({ logs, loans, onRevert }) {
         )}
       </div>
 
-      {/* Modal de Imagen de Cartilla 24 Cuotas */}
+      {/* HISTORIAL DE BORRADOS / ANULADOS */}
+      <div className="space-y-3 pt-3 border-t border-white/10">
+        <h4 className="text-xs font-black uppercase tracking-widest text-rose-400 flex items-center gap-1.5 px-1">
+          <RotateCcw size={14} />
+          <span>Pagos Borrados / Anulados de {selectedCobrador} ({borradosRegistrados.length})</span>
+        </h4>
+
+        {borradosRegistrados.length === 0 ? (
+          <div className="text-center p-4 bg-white/[0.02] rounded-2xl border border-white/5">
+            <p className="text-slate-600 text-[11px] font-bold">No hay pagos borrados o anulados para {selectedCobrador}.</p>
+          </div>
+        ) : (
+          borradosRegistrados.map((log) => {
+            const esEfectivo = log.metodo === 'EFECTIVO' || (log.descripcion && log.descripcion.toLowerCase().includes('efectivo'));
+            const numYape = log.yapeAsociado || loanActual?.yape || '';
+
+            return (
+              <div key={log.id} className="p-4 rounded-2xl border border-rose-500/30 bg-rose-950/20 flex justify-between items-center">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
+                      BORRADO / ANULADO
+                    </span>
+                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30 uppercase flex items-center gap-1">
+                      {esEfectivo ? <Banknote size={10} /> : <Smartphone size={10} />}
+                      {esEfectivo ? 'Efectivo' : `Yape ${numYape ? `(${numYape})` : ''}`}
+                    </span>
+                  </div>
+                  <p className="text-xs font-black text-white">Cobrador: {log.prestamista}</p>
+                  <p className="text-[11px] font-bold text-slate-400">
+                    Fecha: {formatDate(log.fecha)} • Hora: {formatTime(log.fecha)}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base font-black text-rose-400 line-through">
+                    S/ {Number(log.monto || 0).toFixed(2)}
+                  </span>
+                  {onDeleteReverted && (
+                    <button
+                      onClick={() => onDeleteReverted(log.id)}
+                      className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
       {showTicketModal && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-3">
           <div className="bg-[#0a0a0a] w-full max-w-md rounded-[34px] border border-cyan-500/30 p-5 flex flex-col max-h-[92dvh]">
@@ -2015,7 +3720,7 @@ function HistoryTab({ logs, loans, onRevert }) {
   );
 }
 
-function InsightsTab({ stats, loans }) {
+function InsightsTab({ stats }) {
   const total = stats.totalDeuda > 0 ? stats.totalDeuda : 1; 
   const porcCapital = (stats.totalCapital / total) * 100;
   const porcInteres = (stats.totalIntereses / total) * 100;
@@ -2023,24 +3728,21 @@ function InsightsTab({ stats, loans }) {
   return (
     <div className="space-y-6 relative z-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-8">
       <div className="mb-8 mt-2 flex items-center gap-3">
-         <PieChart className="text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]" size={24} />
-         <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 tracking-tighter uppercase">Telemetría</h2>
+         <PieChart className="text-amber-400" size={24} />
+         <h2 className="text-2xl font-black text-white tracking-tighter uppercase">Telemetría</h2>
       </div>
 
       <div className="bg-rose-950/20 p-8 rounded-[32px] border border-rose-500/20 relative overflow-hidden backdrop-blur-xl">
-        <div className="absolute top-[-20%] right-[-10%] w-40 h-40 bg-rose-500/10 blur-[40px] rounded-full pointer-events-none"></div>
-        <div className="flex items-center gap-2 mb-6 text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.6)]">
+        <div className="flex items-center gap-2 mb-6 text-rose-400">
           <TrendingUp size={24} />
           <h3 className="font-black text-xs uppercase tracking-widest">Fuga de Capital (Intereses)</h3>
         </div>
-        <p className="text-5xl font-black text-white mb-2 tracking-tighter drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">S/ {stats.totalIntereses.toFixed(2)}</p>
+        <p className="text-5xl font-black text-white mb-2 tracking-tighter">S/ {stats.totalIntereses.toFixed(2)}</p>
         <p className="text-xs text-rose-300/60 mb-8 font-bold uppercase tracking-widest">Penalización acumulada del sistema</p>
         
-        <div className="w-full h-4 bg-black/50 rounded-full flex overflow-hidden mb-4 shadow-inner border border-white/5">
-          <div className="bg-cyan-500 h-full relative" style={{ width: `${porcCapital}%` }}>
-             <div className="absolute inset-0 bg-white/20 w-1/2 animate-[pulse_2s_infinite]"></div>
-          </div>
-          <div className="bg-rose-500 h-full shadow-[0_0_10px_rgba(244,63,94,0.8)] relative" style={{ width: `${porcInteres}%` }}></div>
+        <div className="w-full h-4 bg-black/50 rounded-full flex overflow-hidden mb-4 border border-white/5">
+          <div className="bg-cyan-500 h-full" style={{ width: `${porcCapital}%` }}></div>
+          <div className="bg-rose-500 h-full" style={{ width: `${porcInteres}%` }}></div>
         </div>
         <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
           <span className="text-cyan-400">Capital S/ {stats.totalCapital.toFixed(0)}</span>
@@ -2051,11 +3753,18 @@ function InsightsTab({ stats, loans }) {
   );
 }
 
-function NavItem({ icon, label, isActive, onClick }) {
+function NavItem({ icon, label, isActive, onClick, badge = 0 }) {
   return (
-    <button onClick={onClick} className={`flex flex-col items-center justify-center w-16 h-12 gap-1 transition-all duration-300 relative ${isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
-      {isActive && <div className="absolute inset-0 bg-white/10 rounded-2xl animate-in zoom-in duration-300"></div>}
-      <div className={`relative z-10 transition-transform duration-300 ${isActive ? 'scale-110 text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]' : ''}`}>{icon}</div>
+    <button onClick={onClick} className={`flex flex-col items-center justify-center w-14 h-12 gap-1 transition-all duration-300 relative ${isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+      {isActive && <div className="absolute inset-0 bg-white/10 rounded-2xl"></div>}
+      <div className={`relative z-10 transition-transform duration-300 ${isActive ? 'scale-110 text-cyan-400' : ''}`}>
+        {icon}
+        {badge > 0 && (
+          <span className="absolute -top-1.5 -right-2 bg-amber-400 text-black text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center">
+            {badge}
+          </span>
+        )}
+      </div>
       <span className={`relative z-10 text-[7px] sm:text-[8px] uppercase tracking-widest ${isActive ? 'font-black text-cyan-100' : 'font-bold'}`}>{label}</span>
     </button>
   );
