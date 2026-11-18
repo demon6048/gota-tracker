@@ -401,15 +401,23 @@ export default function App() {
     const loan = loans.find(l => l.id === loanId);
     if (!loan || !user) return;
 
+    const montoNum = parseFloat(amountPaid) || 0;
+    if (montoNum <= 0) return;
+
     const todayStr = getLocalTodayString();
     const isSameDay = loan.lastManualPaymentDate === todayStr;
-    const count = isSameDay ? (loan.manualPaymentsCount || 0) : 0;
+    const count = isSameDay ? (Number(loan.manualPaymentsCount) || 0) : 0;
 
-    const nuevoSaldo = Math.max(0, loan.saldoPendiente - amountPaid);
-    const nuevoExigible = Math.max(0, (loan.montoExigible || 0) - amountPaid);
-    const nuevoPagado = (loan.pagadoAcumulado || 0) + amountPaid;
+    const saldoActual = parseFloat(loan.saldoPendiente) || 0;
+    const exigibleActual = parseFloat(loan.montoExigible) || 0;
+    const pagadoActual = parseFloat(loan.pagadoAcumulado) || 0;
 
-    const desbloquearRuleteo = nuevoSaldo <= 0 ? false : loan.yaMePrestoBloqueado;
+    const nuevoSaldo = Math.max(0, saldoActual - montoNum);
+    const nuevoExigible = Math.max(0, exigibleActual - montoNum);
+    const nuevoPagado = pagadoActual + montoNum;
+
+    // Firestore rechaza valores undefined; forzamos booleano seguro para que siempre baje la cuota y cierre el candado
+    const desbloquearRuleteo = nuevoSaldo <= 0 ? false : Boolean(loan.yaMePrestoBloqueado);
 
     try {
       const loanDoc = doc(db, coleccionGlobal, loan.id);
@@ -417,17 +425,18 @@ export default function App() {
         saldoPendiente: nuevoSaldo,
         montoExigible: nuevoExigible,
         pagadoAcumulado: nuevoPagado,
+        lastProcessedDate: todayStr,
         lastManualPaymentDate: todayStr,
         manualPaymentsCount: count + 1,
-        ultimoPagoMonto: amountPaid,
-        ultimoPagoMetodo: paymentMethod,
+        ultimoPagoMonto: montoNum,
+        ultimoPagoMetodo: paymentMethod || 'YAPE',
         ultimoNroOperacion: nroOperacion || '',
-        cupoDisponible: loan.cupoDisponible || loan.capital || 600,
+        cupoDisponible: parseFloat(loan.cupoDisponible || loan.capital || 600) || 600,
         yaMePrestoBloqueado: desbloquearRuleteo
       });
 
       const opInfo = nroOperacion ? ` (Op. #${nroOperacion})` : '';
-      await logActivity('PAGO', loan.prestamista, `Abono por ${paymentMethod} a favor de ${loan.prestamista}${opInfo}`, amountPaid, loan.id, paymentMethod, nroOperacion, {
+      await logActivity('PAGO', loan.prestamista, `Abono por ${paymentMethod} a favor de ${loan.prestamista}${opInfo}`, montoNum, loan.id, paymentMethod, nroOperacion, {
         yapeAsociado: loan.yape || ''
       });
     } catch (error) {
@@ -498,19 +507,49 @@ export default function App() {
     }
   };
 
-  const handleEdit = async (id, prestamista, telefono, yape, nuevoSaldo, nuevaCuota, nuevoExigible, nuevaFecha, modalidadEdit = 'DIARIO', fechaVencimientoEdit = '', diasAlertaEdit = 5, cupoEdit = 0, limpiarHistorialAnterior = false, yaMePrestoEdit = false) => {
+  const handleEdit = async (id, prestamista, telefono, yape, nuevoSaldo, nuevaCuota, nuevoExigible, nuevaFecha, modalidadEdit = 'DIARIO', fechaVencimientoEdit = '', diasAlertaEdit = 5, cupoEdit = 0, limpiarHistorialAnterior = false, yaMePrestoEdit = false, cerrarCandadoHoy = null) => {
     if (!user) return;
     try {
       const loan = loans.find(l => l.id === id);
-      const capNum = parseFloat(cupoEdit) || loan?.capital || 600;
-      const porc = loan?.porcentajeInteres !== undefined ? loan.porcentajeInteres : 20;
-      const interesCalc = capNum * (porc / 100);
-      const deudaTotal = capNum + interesCalc;
+      const todayStr = getLocalTodayString();
+      const cuotaNum = modalidadEdit === 'FIJO' ? 0 : (parseFloat(nuevaCuota) || 0);
       const saldoNum = parseFloat(nuevoSaldo) || 0;
+      const exigibleNum = parseFloat(nuevoExigible) || 0;
+
+      let capNum = parseFloat(cupoEdit) || parseFloat(loan?.capital) || 600;
+      const porc = loan?.porcentajeInteres !== undefined ? parseFloat(loan.porcentajeInteres) : 20;
+      let interesCalc = capNum * (porc / 100);
+      let deudaTotal = capNum + interesCalc;
+
+      // Si la cuota diaria (ej. S/ 60 x 24 días = 1440) o el saldo supera la deuda base anterior, ajustamos automáticamente
+      if (modalidadEdit !== 'FIJO' && cuotaNum > 0) {
+        const deudaPorCuotas = cuotaNum * 24;
+        if (saldoNum > deudaTotal || deudaPorCuotas > deudaTotal) {
+          deudaTotal = Math.max(saldoNum, deudaPorCuotas);
+          capNum = Math.round(deudaTotal / (1 + (porc / 100)));
+          interesCalc = deudaTotal - capNum;
+        }
+      } else if (saldoNum > deudaTotal) {
+        deudaTotal = saldoNum;
+        capNum = Math.round(deudaTotal / (1 + (porc / 100)));
+        interesCalc = deudaTotal - capNum;
+      }
+
       const nuevoPagadoAcumulado = Math.max(0, deudaTotal - saldoNum);
 
       if (limpiarHistorialAnterior && loan) {
         await purgeOldLogsForLender(prestamista || loan.prestamista, id);
+      }
+
+      let nextLastManualDate = loan?.lastManualPaymentDate || null;
+      let nextManualCount = Number(loan?.manualPaymentsCount) || 0;
+
+      if (cerrarCandadoHoy === true) {
+        nextLastManualDate = todayStr;
+        nextManualCount = Math.max(1, nextManualCount);
+      } else if (cerrarCandadoHoy === false || exigibleNum > 0) {
+        nextLastManualDate = null;
+        nextManualCount = 0;
       }
 
       const loanDoc = doc(db, coleccionGlobal, id);
@@ -523,9 +562,12 @@ export default function App() {
         deudaTotal: deudaTotal,
         saldoPendiente: saldoNum,
         pagadoAcumulado: nuevoPagadoAcumulado,
-        cuotaDiaria: modalidadEdit === 'FIJO' ? 0 : (parseFloat(nuevaCuota) || 0),
-        montoExigible: parseFloat(nuevoExigible) || 0,
-        fechaInicio: new Date(nuevaFecha + 'T12:00:00').toISOString(),
+        cuotaDiaria: cuotaNum,
+        montoExigible: exigibleNum,
+        lastProcessedDate: todayStr,
+        lastManualPaymentDate: nextLastManualDate,
+        manualPaymentsCount: nextManualCount,
+        fechaInicio: new Date((nuevaFecha || todayStr) + 'T12:00:00').toISOString(),
         modalidad: modalidadEdit,
         fechaVencimiento: modalidadEdit === 'FIJO' ? fechaVencimientoEdit : '',
         diasAlerta: parseInt(diasAlertaEdit, 10) || 5,
@@ -585,12 +627,15 @@ export default function App() {
       const loan = loans.find(l => l.id === log.loanId || l.prestamista === log.prestamista);
       
       if (loan) {
-        const nuevoSaldo = loan.saldoPendiente + log.monto;
-        const nuevoPagado = Math.max(0, (loan.pagadoAcumulado || 0) - log.monto);
+        const montoRevertido = parseFloat(log.monto) || 0;
+        const nuevoSaldo = (parseFloat(loan.saldoPendiente) || 0) + montoRevertido;
+        const nuevoPagado = Math.max(0, (parseFloat(loan.pagadoAcumulado) || 0) - montoRevertido);
+        const nuevoExigible = (parseFloat(loan.montoExigible) || 0) + montoRevertido;
         
         await updateDoc(doc(db, coleccionGlobal, loan.id), {
           saldoPendiente: nuevoSaldo,
           pagadoAcumulado: nuevoPagado,
+          montoExigible: nuevoExigible,
           lastManualPaymentDate: null, 
           manualPaymentsCount: Math.max(0, (loan.manualPaymentsCount || 1) - 1)
         });
@@ -1814,25 +1859,46 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
   const [isRenewing, setIsRenewing] = useState(false);
   const [copied, setCopied] = useState(false);
   
+  const todayStr = getLocalTodayString();
+  const yaPagadoHoy = loan.lastManualPaymentDate === todayStr && (loan.manualPaymentsCount || 0) >= 1;
+
   const [editPrestamista, setEditPrestamista] = useState(loan.prestamista || '');
   const [editWhatsApp, setEditWhatsApp] = useState(loan.telefono || '');
   const [editYape, setEditYape] = useState(loan.yape || '');
   const [editSaldo, setEditSaldo] = useState((loan.saldoPendiente || 0).toString());
   const [editCuota, setEditCuota] = useState((loan.cuotaDiaria || 0).toString());
   const [editExigible, setEditExigible] = useState((loan.montoExigible || 0).toString());
-  const initialDateStr = loan.fechaInicio ? loan.fechaInicio.split('T')[0] : getLocalTodayString();
+  const initialDateStr = loan.fechaInicio ? loan.fechaInicio.split('T')[0] : todayStr;
   const [editFechaInicio, setEditFechaInicio] = useState(initialDateStr);
   const [editModalidad, setEditModalidad] = useState(loan.modalidad || 'DIARIO');
-  const [editFechaVencimiento, setEditFechaVencimiento] = useState(loan.fechaVencimiento || addDaysToDateStr(getLocalTodayString(), 15));
+  const [editFechaVencimiento, setEditFechaVencimiento] = useState(loan.fechaVencimiento || addDaysToDateStr(todayStr, 15));
   const [editDiasAlerta, setEditDiasAlerta] = useState(loan.diasAlerta || 5);
   const [editCupo, setEditCupo] = useState((loan.cupoDisponible || loan.capital || 600).toString());
-  const [limpiarHistorialViejoCheck, setLimpiarHistorialViejoCheck] = useState(true);
+  const [limpiarHistorialViejoCheck, setLimpiarHistorialViejoCheck] = useState(false);
   const [editYaMePresto, setEditYaMePresto] = useState(Boolean(loan.yaMePrestoBloqueado));
+  const [editCandadoHoy, setEditCandadoHoy] = useState(yaPagadoHoy);
 
   const baseCap = loan.cupoDisponible || loan.capital || 600;
   const [renewCap, setRenewCap] = useState(baseCap.toString());
   const [renewQuota, setRenewQuota] = useState((loan.cuotaDiaria || Math.round((baseCap * 1.2) / 24)).toString());
   const [renewCuotasPagadas, setRenewCuotasPagadas] = useState('0');
+
+  // Sincronizar siempre los campos de edición con los datos más recientes de Firebase
+  useEffect(() => {
+    setEditPrestamista(loan.prestamista || '');
+    setEditWhatsApp(loan.telefono || '');
+    setEditYape(loan.yape || '');
+    setEditSaldo((loan.saldoPendiente || 0).toString());
+    setEditCuota((loan.cuotaDiaria || 0).toString());
+    setEditExigible((loan.montoExigible || 0).toString());
+    setEditFechaInicio(loan.fechaInicio ? loan.fechaInicio.split('T')[0] : getLocalTodayString());
+    setEditModalidad(loan.modalidad || 'DIARIO');
+    setEditFechaVencimiento(loan.fechaVencimiento || addDaysToDateStr(getLocalTodayString(), 15));
+    setEditDiasAlerta(loan.diasAlerta || 5);
+    setEditCupo((loan.cupoDisponible || loan.capital || 600).toString());
+    setEditYaMePresto(Boolean(loan.yaMePrestoBloqueado));
+    setEditCandadoHoy(loan.lastManualPaymentDate === getLocalTodayString() && (loan.manualPaymentsCount || 0) >= 1);
+  }, [loan, isEditing]);
 
   const esEnReserva = (loan.saldoPendiente || 0) <= 0;
   const esFijo = loan.modalidad === 'FIJO';
@@ -1844,12 +1910,10 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
   const cuotasRestantes = esFijo ? Math.max(0, diasParaVencer) : Math.ceil((loan.saldoPendiente || 0) / cuotaSegura);
   const fechaFin = esFijo && loan.fechaVencimiento ? new Date(loan.fechaVencimiento + 'T12:00:00') : getEndDate(loan.fechaInicio, cuotasRestantes);
   
-  const deudaOriginal = loan.deudaTotal || 1; 
-  const pagado = loan.pagadoAcumulado || 0;
+  const deudaOriginal = Math.max(loan.deudaTotal || 1, loan.saldoPendiente || 0); 
+  const pagado = loan.pagadoAcumulado || Math.max(0, deudaOriginal - (loan.saldoPendiente || 0));
   const porcentajeProgreso = esEnReserva ? 100 : Math.min(100, Math.max(0, (pagado / deudaOriginal) * 100));
   
-  const todayStr = getLocalTodayString();
-  const yaPagadoHoy = loan.lastManualPaymentDate === todayStr && (loan.manualPaymentsCount || 0) >= 1;
   const exigible = loan.montoExigible || 0;
   const estaCercaDeCero = !esEnReserva && !esFijo && cuotasRestantes <= 3;
 
@@ -2045,8 +2109,16 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
               <input type="number" value={editSaldo} onChange={(e) => setEditSaldo(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-2.5 text-sm font-bold" />
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Monto Exigible</label>
-              <input type="number" value={editExigible} onChange={(e) => setEditExigible(e.target.value)} className="w-full bg-black/50 border border-white/10 text-white rounded-2xl px-4 py-2.5 text-sm font-bold" />
+              <label className="block text-[10px] font-bold text-amber-400 mb-1 uppercase">Monto Exigible Hoy</label>
+              <input
+                type="number"
+                value={editExigible}
+                onChange={(e) => {
+                  setEditExigible(e.target.value);
+                  if (parseFloat(e.target.value) > 0) setEditCandadoHoy(false);
+                }}
+                className="w-full bg-black/50 border border-amber-500/40 text-amber-300 rounded-2xl px-4 py-2.5 text-sm font-black"
+              />
             </div>
           </div>
 
@@ -2078,7 +2150,48 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
             </div>
           )}
 
-          <div className="space-y-2 pt-2">
+          {/* Control directo del Candado de Hoy y Exigible */}
+          <div className="bg-black/60 border border-white/10 rounded-2xl p-3 space-y-2">
+            <span className="text-[9px] font-black text-amber-300 uppercase block">
+              Control de Candado y Cuota de Hoy
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditCandadoHoy(false);
+                  if (parseFloat(editExigible) <= 0) {
+                    setEditExigible(editCuota || '60');
+                  }
+                }}
+                className={`py-2 px-2 rounded-xl text-[10px] font-black uppercase border flex items-center justify-center gap-1 transition-all ${
+                  !editCandadoHoy
+                    ? 'bg-emerald-500 text-black border-emerald-400'
+                    : 'bg-white/5 text-slate-400 border-white/10'
+                }`}
+              >
+                <Wallet size={12} />
+                <span>Abierto (Exigible S/{editExigible || editCuota})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditCandadoHoy(true);
+                  setEditExigible('0');
+                }}
+                className={`py-2 px-2 rounded-xl text-[10px] font-black uppercase border flex items-center justify-center gap-1 transition-all ${
+                  editCandadoHoy
+                    ? 'bg-amber-400 text-black border-amber-300'
+                    : 'bg-white/5 text-slate-400 border-white/10'
+                }`}
+              >
+                <Lock size={12} />
+                <span>Cerrar Candado (LOCK)</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-1">
             <label className="flex items-center gap-2 text-xs font-bold text-rose-300 cursor-pointer">
               <input
                 type="checkbox"
@@ -2106,7 +2219,7 @@ function LoanCard({ loan, onPayRequest, onEdit, onDelete, onRenew, onToggleYaMeP
             <Trash2 size={16}/> ELIMINAR
           </button>
           <button onClick={() => { 
-              onEdit(loan.id, editPrestamista, editWhatsApp, editYape, editSaldo, editCuota, editExigible, editFechaInicio, editModalidad, editFechaVencimiento, editDiasAlerta, editCupo, limpiarHistorialViejoCheck, editYaMePresto); 
+              onEdit(loan.id, editPrestamista, editWhatsApp, editYape, editSaldo, editCuota, editExigible, editFechaInicio, editModalidad, editFechaVencimiento, editDiasAlerta, editCupo, limpiarHistorialViejoCheck, editYaMePresto, editCandadoHoy); 
               setIsEditing(false); 
             }} 
             className="flex-1 bg-cyan-500 text-black py-3 rounded-2xl text-xs font-black flex justify-center items-center gap-2">
